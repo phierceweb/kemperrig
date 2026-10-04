@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# bin/run — invoke a command via the kemperrig venv.
+#
+#   bin/run setup             create/refresh the venv, editable install, link pf-core docs
+#   bin/run pytest [args]     run the test suite in the venv
+#   bin/run python [args]     one-off venv'd python
+#   bin/run pip|ruff [args]   pip / ruff in the venv
+#   bin/run lint              ruff check + pf-core structural gate (300 soft / 500 hard)
+#   bin/run kemperrig [args]  the CLI
+#   bin/run sample DIR        write a synthetic library to DIR (tests/_sample.py)
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+PY="$ROOT/.venv/bin/python"
+
+# Local, uncommitted settings (KEMPERRIG_LIBRARY / KEMPERRIG_CRITERIA).
+if [ -f "$ROOT/.env" ]; then set -a; . "$ROOT/.env"; set +a; fi
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  pytest|python|pip|ruff|pf-guards) exec "$ROOT/.venv/bin/$cmd" "$@" ;;
+  kemperrig) exec "$PY" -m kemperrig.cli "$@" ;;
+  sample) exec "$PY" "$ROOT/tests/_sample.py" "$@" ;;
+  setup)
+    if [ ! -d "$ROOT/.venv" ]; then
+      # any interpreter the project supports, newest first — not just the one on this Mac
+      for v in python3.14 python3.13 python3.12; do
+        command -v "$v" >/dev/null && { "$v" -m venv "$ROOT/.venv"; break; }
+      done
+      [ -d "$ROOT/.venv" ] || { echo "need python3.12 or newer on PATH" >&2; exit 1; }
+    fi
+    "$PY" -m pip install -q --upgrade pip
+    "$PY" -m pip install -q -e ".[dev]"
+    mkdir -p docs
+    ln -sfn "$("$PY" -c 'import pf_core, pathlib; print(pathlib.Path(pf_core.__file__).parent / "docs")')" \
+       docs/pf-core 2>/dev/null || true
+    echo "setup OK"
+    ;;
+  lint)
+    "$ROOT/.venv/bin/ruff" check src tests
+    "$PY" -m pf_core.guards --root src
+    "$PY" -m pf_core.guards --root tests
+    echo "lint OK"
+    ;;
+  ""|--help|-h) echo "usage: bin/run {setup|pytest|python|pip|ruff|lint|kemperrig|sample} [args]" ;;
+  *) echo "unknown command: $cmd" >&2; exit 2 ;;
+esac

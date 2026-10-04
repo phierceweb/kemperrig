@@ -1,0 +1,9 @@
+# Structural gate policy — read by default by `python -m pf_core.guards`.
+#
+# Deliberately empty. Limits are the GuardsConfig defaults in pf_core/guards/config.py;
+# `bin/run lint` and .github/workflows/ci.yml each pass --root explicitly (src, then
+# tests), so a `root` key here would be dead config.
+#
+# No [tool.pf_guards.baseline] table: every file is under the soft limit. If one ever
+# isn't, split the file — do not grandfather it.
+[tool.pf_guards]

@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets
+.env
+
+# Local run output
+logs/
+*.jsonl
+
+# Rig libraries are personal data and usually contain licensed commercial profiles.
+*.rmbackup
+*.rigpack
+*.presetpack
+*.krig
+samples/
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.bak
+*.orig
+*.rej
+
+# AI / agent workspace — AGENTS.md, CLAUDE.md, .ai/rules and .ai/skills (and the
+# .claude/.cursor links to them) are tracked; everything else is local
+.ai/plans/
+.ai/scripts/
+.ai/docs/
+.claude/settings.local.json
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+.superpowers/
+.cbmignore
+CLAUDE.local.md
+
+# pf-core docs symlink (bin/run setup recreates it)
+docs/pf-core

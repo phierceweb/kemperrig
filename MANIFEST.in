@@ -1,0 +1,16 @@
+# setuptools' implicit sdist rules skip `tests/_*.py` fixtures and `config/`; the shipped
+# suite and the README's `--criteria` example need both.
+include MANIFEST.in
+include CHANGELOG.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md TRADEMARKS.md
+include .env.example
+recursive-include tests *.py
+recursive-include config *.json
+recursive-include docs *.md
+exclude .coverage
+prune .ai
+prune .claude
+prune .cursor
+prune .github
+
+# docs/pf-core is a gitignored symlink into site-packages; recursive-include follows it
+prune docs/pf-core

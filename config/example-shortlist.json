@@ -1,0 +1,14 @@
+{
+  "_comment": "Example shortlist criteria. amp_patterns groups case-insensitive substrings by amp family (the grouping is for the reader; matching flattens it). Copy this and edit for your own rig.",
+  "label": "high-gain shortlist",
+  "context": "cab held constant",
+  "gain_min": 5.0,
+  "amp_patterns": {
+    "Mesa Rectifier": ["Rectifier", "Recto"],
+    "EVH / Peavey": ["5150", "5153", "6505"],
+    "Diezel": ["VH4", "Einstein"],
+    "Soldano": ["SLO"],
+    "Friedman": ["BE100", "BE 100"],
+    "Marshall high-gain": ["JCM2000", "DSL", "JVM"]
+  }
+}

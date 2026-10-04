@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kemperrig"
+version = "0.1.0"
+description = "Reader for Kemper Profiler Rig Manager backups (.rmbackup) and the live Rig Manager library — rigs, performances, presets, and the SysEx inside them"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Mike Farr" }]
+keywords = [
+    "kemper", "kemper-profiler", "kpa", "profiler", "rig-manager", "rmbackup", "krig",
+    "amp-modeler", "guitar", "audio", "sysex", "midi", "backup",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Typing :: Typed",
+]
+dependencies = ["pf-core~=0.25.0"]
+
+[project.urls]
+Repository = "https://github.com/phierceweb/kemperrig"
+Documentation = "https://github.com/phierceweb/kemperrig/blob/main/docs/README.md"
+Changelog = "https://github.com/phierceweb/kemperrig/blob/main/CHANGELOG.md"
+Issues = "https://github.com/phierceweb/kemperrig/issues"
+
+[project.scripts]
+kemperrig = "kemperrig.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6", "pre-commit>=3.5"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+kemperrig = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B"]
+ignore = ["E501", "B008", "B904"]

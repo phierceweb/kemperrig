@@ -1,0 +1,26 @@
+# Run `pre-commit install` once per clone (from the project venv: `bin/run pip install
+# pre-commit` comes with the [dev] extra). CI runs ruff, the gate and the suite regardless.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: .venv/bin/ruff check src tests
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: pf-guards
+        name: pf-core file-size gate
+        entry: bash -c '.venv/bin/python -m pf_core.guards --root src && .venv/bin/python -m pf_core.guards --root tests'
+        language: system
+        pass_filenames: false
+        always_run: true
+      # The leak scan is local-only (it reads the maintainer's own library), so it is absent
+      # from a public clone. Skip only when the whole directory is gone: a missing script
+      # inside an existing .ai/scripts/ is a deletion, and fails rather than passing.
+      - id: leak-scan
+        name: leak scan (local)
+        entry: bash -c 'if [ -f .ai/scripts/leak_scan.py ]; then set -a; [ -f .env ] && . ./.env; set +a; .venv/bin/python .ai/scripts/leak_scan.py; elif [ -d .ai/scripts ]; then echo "leak scan missing from .ai/scripts/ — recover it" >&2; exit 1; else echo "leak scan not present (public clone) - skipped"; fi'
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -1,0 +1,79 @@
+# Publishes kemperrig to PyPI when a release tag (v*) is pushed, and to TestPyPI when the
+# workflow is run by hand — the rehearsal before a first upload, since a name and version
+# can be uploaded to PyPI only once.
+#
+# `build` makes the sdist and wheel and runs twine check; `test` runs the whole CI matrix
+# on the same commit; the publish jobs wait for both and upload through OIDC trusted
+# publishing, so no token lives in the repo. The trusted publishers are registered on
+# pypi.org and test.pypi.org: owner phierceweb, repo kemperrig, workflow publish.yml,
+# environments `pypi` and `testpypi`. The `pypi` environment's required reviewer is the
+# gate before anything reaches PyPI.
+name: publish
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Read-only by default; the publish jobs ask for the OIDC token they need.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      # A tag that disagrees with pyproject's version would otherwise reach PyPI and burn
+      # the filename.
+      - name: tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag v$TAG_VERSION != pyproject version $PKG_VERSION — bump pyproject (and CHANGELOG) before tagging"
+            exit 1
+          fi
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-test:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
