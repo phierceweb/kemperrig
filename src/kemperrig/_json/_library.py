@@ -29,7 +29,7 @@ def rig_doc(d: RigDetail) -> dict:
     return _rig(d.rig) | {"decode": decode_doc(d)}
 
 def _performance(p: Performance) -> dict:
-    return {"name": p.name, "tempo": p.tempo,
+    return {"name": p.name, "tempo": p.tempo, "prog_nr": p.prog_nr,
             "slots": [{k: v for k, v in asdict(s).items()} for s in p.slots]}
 
 def _preset(p: Preset) -> dict:

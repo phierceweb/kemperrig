@@ -13,10 +13,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
-from pf_core.utils.io import atomic_write_bytes
+from pw_foundation.utils.io import atomic_write_bytes
 
 from kemperrig import _sysex
 from kemperrig._archive import open_zip, read_entry
+from kemperrig._guard import names_folder, write_refusal
 from kemperrig._sysex import _RIG_NAME_ADDRESS
 from kemperrig._sysex_edit import replace_string
 from kemperrig._tables import (
@@ -26,10 +27,13 @@ from kemperrig._tables import (
     _read_rig_names,
     _read_slot_rig_names,
 )
-from kemperrig.model import names_folder, rig_folder, write_refusal, zip_layout_problem
+from kemperrig.model import rig_folder, zip_layout_problem
 
 # No payload rig name in real backups is longer, or uses anything but printable ASCII.
 _MAX_NAME = 32
+# Every statement overrides what the schema declares: a conflict clause (REPLACE would drop
+# another row, IGNORE skip the rename) and a collation (NOCASE would rename "a" with "A").
+_UPDATE = "UPDATE OR ABORT"
 
 
 class Renamed(NamedTuple):
@@ -69,23 +73,37 @@ def _rewrite_payloads(con: sqlite3.Connection, table: str, targets: dict[int, se
         except ValueError:
             continue
         if n:
-            con.execute(f'UPDATE "{table}" SET data = ? WHERE id = ?', (blob, row_id))
+            con.execute(f'{_UPDATE} "{table}" SET data = ? WHERE id = ?', (blob, row_id))
             changed += n
     return changed
+
+
+def _open(db_bytes: bytes) -> sqlite3.Connection:
+    """`db_bytes` in memory, in SQLite's defensive mode with triggers off: the UPDATEs below
+    run on a schema nobody here wrote, which must not rewrite itself or any other row."""
+    con = sqlite3.connect(":memory:")
+    try:
+        con.deserialize(db_bytes)
+        con.setconfig(sqlite3.SQLITE_DBCONFIG_DEFENSIVE, True)
+        con.setconfig(sqlite3.SQLITE_DBCONFIG_ENABLE_TRIGGER, False)
+    except BaseException:
+        con.close()
+        raise
+    return con
 
 
 def _rename_in_db(db_bytes: bytes, old: str, new: str) -> tuple[bytes, int, int]:
     """Return (db_bytes, rows renamed, payloads rewritten). If nothing changed, the ORIGINAL
     bytes are returned (not a re-serialized copy) so untouched dbs stay byte-identical."""
-    con = sqlite3.connect(":memory:")
+    con = _open(db_bytes)
     try:
-        con.deserialize(db_bytes)
         if not _has_table(con, "Rigs"):
             return db_bytes, 0, 0
-        ids = [r[0] for r in con.execute('SELECT id FROM Rigs WHERE "Name" = ?', (old,))]
+        ids = [r[0] for r in con.execute(
+            'SELECT id FROM Rigs WHERE "Name" = ? COLLATE BINARY', (old,))]
         if not ids:
             return db_bytes, 0, 0
-        con.execute('UPDATE Rigs SET "Name" = ? WHERE "Name" = ?', (new, old))
+        con.execute(f'{_UPDATE} Rigs SET "Name" = ? WHERE "Name" = ? COLLATE BINARY', (new, old))
         payloads = _rewrite_payloads(con, "Rigs_blobs", dict.fromkeys(ids), old, new)
         con.commit()
         return con.serialize(), len(ids), payloads
@@ -96,9 +114,8 @@ def _rename_in_db(db_bytes: bytes, old: str, new: str) -> tuple[bytes, int, int]
 def _repoint_slots(db_bytes: bytes, old: str, new: str) -> tuple[bytes, int, int]:
     """Re-point performance slots at the renamed rig: the slot's column, and the name inside
     the slot's own track (track n holds slot n). Returns (db_bytes, slots, payloads)."""
-    con = sqlite3.connect(":memory:")
+    con = _open(db_bytes)
     try:
-        con.deserialize(db_bytes)
         if not _has_table(con, "Performances"):
             return db_bytes, 0, 0
         cols = {row[1] for row in con.execute('PRAGMA table_info("Performances")')}
@@ -107,9 +124,10 @@ def _repoint_slots(db_bytes: bytes, old: str, new: str) -> tuple[bytes, int, int
             col = f"Slot{slot}RigName"
             if col in cols:
                 for (row_id,) in con.execute(
-                        f'SELECT id FROM Performances WHERE "{col}" = ?', (old,)):
+                        f'SELECT id FROM Performances WHERE "{col}" = ? COLLATE BINARY', (old,)):
                     targets.setdefault(row_id, set()).add(slot)
-                con.execute(f'UPDATE Performances SET "{col}" = ? WHERE "{col}" = ?', (new, old))
+                con.execute(f'{_UPDATE} Performances SET "{col}" = ? '
+                            f'WHERE "{col}" = ? COLLATE BINARY', (new, old))
         slots = sum(len(s) for s in targets.values())
         if not slots:
             return db_bytes, 0, 0
@@ -192,20 +210,23 @@ def rename_rig(src: str, dst: str, old_name: str, new_name: str, *,
     with open_zip(src) as zin:
         items = [(info, read_entry(zin, info, src)) for info in zin.infolist()]
     data_of = {info.filename: data for info, data in items}
-    why = _content_refusal(list(data_of), data_of.__getitem__, source=src, old=old_name,
-                           new=new_name)
+    why = _content_refusal([info.filename for info, _ in items], data_of.__getitem__,
+                           source=src, old=old_name, new=new_name)
     if why:
         raise ValueError(why)
 
     rigs = slots = rig_payloads = slot_payloads = 0
     out: list[tuple[zipfile.ZipInfo, bytes]] = []
     for info, data in items:
-        if info.filename == _PERF_DB:
-            data, n, p = _repoint_slots(data, old_name, new_name)
-            slots, slot_payloads = slots + n, slot_payloads + p
-        elif rig_folder(info.filename) is not None:
-            data, n, p = _rename_in_db(data, old_name, new_name)
-            rigs, rig_payloads = rigs + n, rig_payloads + p
+        try:
+            if info.filename == _PERF_DB:
+                data, n, p = _repoint_slots(data, old_name, new_name)
+                slots, slot_payloads = slots + n, slot_payloads + p
+            elif rig_folder(info.filename) is not None:
+                data, n, p = _rename_in_db(data, old_name, new_name)
+                rigs, rig_payloads = rigs + n, rig_payloads + p
+        except sqlite3.IntegrityError as e:
+            raise ValueError(f"{info.filename} in {src}: its schema refuses the rename ({e})")
         out.append((info, data))
 
     buf = io.BytesIO()

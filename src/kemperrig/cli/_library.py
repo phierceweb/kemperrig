@@ -22,7 +22,8 @@ def _write_golden(args) -> int:
     if why:
         print(f"kemperrig: {_views.terminal_safe(why)}", file=sys.stderr)
         return 2
-    text = _json.census_text(census.take(Backup.open(args.backup)))
+    comment = census.existing_comment(args.write_golden) if args.force else None
+    text = _json.census_text(census.take(Backup.open(args.backup)), comment=comment)
     census.write(text, args.write_golden, source=args.backup, force=args.force)
     print(f"wrote census to {args.write_golden}")
     return 0

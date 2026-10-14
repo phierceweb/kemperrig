@@ -11,7 +11,7 @@ import sys
 import xml.etree.ElementTree as ET
 import zipfile
 
-from pf_core.utils.env import resolve_str
+from pw_foundation.utils.env import resolve_str
 
 from .. import __version__, _enums, _views
 from . import _compare, _curation, _doctor, _library, _packs, _pages, _write

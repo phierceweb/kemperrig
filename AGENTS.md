@@ -15,7 +15,7 @@ source file.** Three writers exist, each writing new files only:
 - `summary --write-golden` → a JSON census (`services/census.py`)
 
 Each keeps its `refusal` guard in the service and re-runs it before writing, starting from
-`model.write_refusal`: an output that is the source, aliases it (case variant, symlink,
+`_guard.write_refusal`: an output that is the source, aliases it (case variant, symlink,
 hardlink, `..`) or lies inside any Rig Manager library is refused — by file identity, never
 by comparing path strings. A change that writes in place does not land.
 
@@ -27,6 +27,7 @@ by comparing path strings. A change that writes in place does not land.
       _packs.py          rig/preset pack rows in, a Pack record out
       model.py           Backup — the container and its entry points (zip / live / snapshot / pack)
       _archive.py        open the .rmbackup zip and read one entry, bounded and damage-checked
+      _guard.py          where a writer may write: never the source, an alias, or a library
       _sysex.py          KThd/KTrk blob decode: framing, strings, amp gain, locked share
       _sysex_effects.py  module blocks: raw pages, other framings, effect chains
       _sysex_edit.py     rewrite one string in a blob, every other byte kept
@@ -39,7 +40,7 @@ by comparing path strings. A change that writes in place does not land.
     tests/               hermetic: _payloads.py builds SysEx, _fixture.py archives,
                          _pack_fixture.py packs, _sample.py a whole library on disk
 
-The library core is stdlib-only. pf-core appears at the CLI boundary (`resolve_str`) and in
+The library core is stdlib-only. pw-foundation appears at the CLI boundary (`resolve_str`) and in
 the three writers (`atomic_write_bytes`); `tests/test_dependencies.py` pins that surface —
 widen it deliberately, in the same commit as the reason, or not at all.
 
@@ -47,7 +48,7 @@ widen it deliberately, in the same commit as the reason, or not at all.
 
     bin/run setup            venv + editable install
     bin/run pytest           the suite
-    bin/run lint             ruff + the pf-core file-size gate (300 soft / 500 hard)
+    bin/run lint             ruff + the pw-foundation file-size gate (300 soft / 500 hard)
     bin/run kemperrig ...    the CLI
     bin/run sample DIR       write a synthetic library to DIR, to try any command on
 

@@ -4,12 +4,12 @@
 
 - Python 3.12+ — use modern syntax (type unions with `|`, `match` where clearer).
 - No star imports (`from x import *`).
-- Imports grouped: stdlib → third-party → pf_core → project. One blank line between groups.
+- Imports grouped: stdlib → third-party → pw_foundation → project. One blank line between groups.
 - Use `from __future__ import annotations` in files with forward references.
 
 ## File size
 
-File-size budgets — a flat soft-WARN/hard-FAIL across `src` and `tests` — are enforced by the `pf_core.guards` build gate (`bin/run lint` + CI); the canonical limit values live in `pf_core/guards/config.py`, not in prose. Split past the soft target by concern. Per-directory guidance: `project-structure.md`. Gate mechanics: `docs/pf-core/guards.md` (symlink `bin/run setup` creates).
+File-size budgets — a flat soft-WARN/hard-FAIL across `src` and `tests` — are enforced by the `pw_foundation.guards` build gate (`bin/run lint` + CI); the canonical limit values live in `pw_foundation/guards/config.py`, not in prose. Split past the soft target by concern. Per-directory guidance: `project-structure.md`. Gate mechanics: `docs/pw-foundation/guards.md` (symlink `bin/run setup` creates).
 
 ## Naming
 

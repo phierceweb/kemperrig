@@ -2,13 +2,14 @@
 
 import io
 import os
+import sqlite3
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from _fixture import build_rmbackup, build_snapshot
-from _payloads import _track_body, string_msg
+from _payloads import _track_body, f08_msg, module_msg, string_msg
 from _pack_fixture import build_pack, krig, pack_rig, rig_body
 
 from kemperrig import _sysex
@@ -56,6 +57,28 @@ class ReadPackTest(unittest.TestCase):
         rig = read_pack(self._pack()).rigs[0]
         self.assertEqual(rig.comment, "Rig comment")
 
+    def test_the_pack_category_is_the_instrument(self):
+        rigs = read_pack(self._pack(rigs=[pack_rig("G"), pack_rig("B", category="Bass")])).rigs
+        self.assertEqual([r.instrument for r in rigs], ["Guitar", "Bass"])
+
+    def test_a_pack_without_a_comment_column_still_reads(self):
+        path = self._pack(rigs=[pack_rig("A"), pack_rig("B")])
+        con = sqlite3.connect(path)
+        con.execute("ALTER TABLE rigs DROP COLUMN comment")
+        con.commit()
+        con.close()
+        rigs = read_pack(path).rigs
+        self.assertEqual([(r.name, r.instrument) for r in rigs], [("A", None), ("B", None)])
+
+    def test_library_rigs_have_no_instrument(self):
+        lib = build_rmbackup(os.path.join(self.d, "l.rmbackup"), rigs=[{"name": "A"}])
+        self.assertIsNone(Backup.open(lib).rigs[0].instrument)
+
+    def test_the_pack_view_shows_the_instrument(self):
+        code, out, _ = _run(["pack", self._pack(rigs=[pack_rig("Low", category="Bass")])])
+        self.assertEqual(code, 0)
+        self.assertIn("[Bass]", out)
+
     def test_name_author_and_date_come_from_the_row(self):
         rig = read_pack(self._pack()).rigs[0]
         self.assertEqual((rig.name, rig.author, rig.date, rig.folder),
@@ -87,6 +110,42 @@ class ReadPackTest(unittest.TestCase):
         self.assertEqual((pack.content, pack.rigs), ("presets", []))
         self.assertEqual([(x.name, x.folder, x.blob) for x in pack.presets],
                          [("Spring", "", krig(body))])
+
+    def test_a_preset_pack_preset_gets_its_class_from_the_pages_it_holds(self):
+        cases = [("Cab", [string_msg("Cab", 0x20), module_msg(0x0c, [1, 2])], "6"),
+                 ("Stomp", [module_msg(0x32, [33, 0, 0, 1])], "3"),
+                 ("Old Stomp", [f08_msg(0x32)], "3"),
+                 ("Amp", [module_msg(0x0a, [1]), module_msg(0x0b, [1])], "4"),
+                 ("Stack", [module_msg(p, [1]) for p in (0x0a, 0x0b, 0x0c)], "8"),
+                 ("Late Cab", [module_msg(0x0a, [1]), module_msg(0x0b, [1]),
+                               f08_msg(0x0c, start=1)], "8"),
+                 ("Mod", [module_msg(0x3a, [1, 0, 0, 1])], None),
+                 ("Text", [string_msg("Text", 0x00)], None)]
+        rigs = [pack_rig(n, body=_track_body(payloads)) for n, payloads, _ in cases]
+        presets = read_pack(self._pack(content="Presets", rigs=rigs)).presets
+        self.assertEqual([(x.name, x.preset_class) for x in presets],
+                         [(n, c) for n, _, c in cases])
+        self.assertTrue(presets[0].is_cab_ir)
+
+    def test_the_pack_view_tags_each_preset_with_its_class(self):
+        rigs = [pack_rig("Cab", body=_track_body([module_msg(0x0c, [1, 2])])),
+                pack_rig("Stomp", body=_track_body([module_msg(0x32, [33, 0, 0, 1])])),
+                pack_rig("Amp", body=_track_body([module_msg(0x0a, [1])])),
+                pack_rig("Odd", body=_track_body([module_msg(0x3a, [1])]))]
+        code, out, _ = _run(["pack", self._pack(content="Presets", rigs=rigs)])
+        self.assertEqual(code, 0)
+        lines = {line.split()[0]: line for line in out.splitlines()[1:]}
+        self.assertIn("[cab IR]", lines["Cab"])
+        self.assertIn("[effect]", lines["Stomp"])
+        self.assertIn("[class 4]", lines["Amp"])
+        self.assertNotIn("[", lines["Odd"])
+
+    def test_presets_counts_a_pack_effect_whose_type_is_not_decoded(self):
+        rigs = [pack_rig("Stomp", body=_track_body([module_msg(0x32, [33, 0, 0, 1])]))]
+        code, out, _ = _run(["presets", self._pack(content="Presets", rigs=rigs)])
+        self.assertEqual(code, 0)
+        self.assertIn("effects 1 · other 0", out)
+        self.assertIn("(type not decoded)", out)
 
 
 class NotAPackTest(unittest.TestCase):

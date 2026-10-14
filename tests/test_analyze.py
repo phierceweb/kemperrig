@@ -1,6 +1,7 @@
 """Relational intelligence: orphans, amp coverage, duplicates, drive split, IR inventory."""
 
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -8,7 +9,8 @@ from contextlib import redirect_stdout
 from unittest import mock
 
 from _fixture import build_rmbackup
-from _payloads import amp_msg, make_blob, module_msg, performance_blob, rig_track, string_msg
+from _payloads import (amp_msg, f08_msg, make_blob, module_msg, performance_blob, rig_track,
+                       string_msg)
 
 from kemperrig import Backup, _sysex
 from kemperrig.cli import main
@@ -245,6 +247,40 @@ class ParseOnceTest(unittest.TestCase):
         with mock.patch.object(_sysex, "_chunks", wraps=_sysex._chunks) as walks:
             analyze.analysis(b)
         self.assertEqual(walks.call_count, 3)
+
+
+class UndecodedSlotTest(unittest.TestCase):
+    def _lib(self):
+        return _backup(rigs=[
+            {"name": "Old", "blob": make_blob([rig_track("Old") + [f08_msg(0x4b)]])},
+            {"name": "Older", "blob": make_blob([rig_track("Older")
+                                                  + [f08_msg(0x4b), f08_msg(0x3a)]])},
+            {"name": "New", "blob": make_blob([rig_track("New")
+                                                + [module_msg(0x3d, [5, 0, 0, 1])]])},
+        ])
+
+    def test_function_08_slots_are_counted_per_slot(self):
+        found = analyze.payloads(self._lib())
+        self.assertEqual(analyze.undecoded_slots(found), [("REV", 2), ("MOD", 1)])
+
+    def test_counted_without_rig_managers_effect_table(self):
+        a = analyze.analysis(self._lib())
+        self.assertEqual(a.effect_categories, [])
+        self.assertEqual(a.effects_undecoded, [("REV", 2), ("MOD", 1)])
+
+    def test_the_view_and_json_show_them(self):
+        path = build_rmbackup(os.path.join(tempfile.mkdtemp(), "t.rmbackup"),
+                              rigs=[{"name": "Old",
+                                     "blob": make_blob([rig_track("Old") + [f08_msg(0x4b)]])}])
+        out = io.StringIO()
+        with redirect_stdout(out):
+            main(["analyze", path])
+        self.assertIn("undecoded effect slots (function-08): REV 1", out.getvalue())
+        out = io.StringIO()
+        with redirect_stdout(out):
+            main(["analyze", path, "--json"])
+        self.assertEqual(json.loads(out.getvalue())["effects_undecoded"],
+                         [{"slot": "REV", "rigs": 1}])
 
 
 if __name__ == "__main__":

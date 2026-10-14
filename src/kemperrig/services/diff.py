@@ -26,7 +26,8 @@ def _attrs(*names: str) -> tuple[tuple[str, Callable], ...]:
 # Fields reported per kind, as (name, getter); the blob is compared separately, as a digest.
 _FIELDS: dict[str, tuple[tuple[str, Callable], ...]] = {
     "rigs": _attrs("gain", "amp_model", "cabinet_name", "author", "comment", "profile_type",
-                   "mic_type", "mic_position", "speaker_manufacturer", "speaker_model"),
+                   "profile_revision", "cabinet_type", "cabinet_configuration", "mic_type",
+                   "mic_position", "speaker_manufacturer", "speaker_model"),
     "performances": (*_attrs("tempo"),
                      *((f"slot {n}", _slot(n)) for n in range(1, _PERF_SLOTS + 1))),
     "presets": _attrs("preset_class", "preset_type", "preset_category"),
@@ -51,6 +52,7 @@ class Diff:
     added: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
     changed: list[Changed] = field(default_factory=list)
+    uncompared: list[str] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
@@ -68,18 +70,37 @@ def digest(blob: bytes) -> str | None:
     return hashlib.sha256(blob).hexdigest()[:12] if blob else None
 
 
-def _key(kind: str, record) -> str:
-    return record.name if kind == "performances" else record.path
+def _key(kind: str, record, by_name: bool) -> str:
+    return record.name if by_name or kind == "performances" else record.path
 
 
-def fingerprints(backup: Backup, kind: str) -> dict[str, list[Fingerprint]]:
+def fingerprints(backup: Backup, kind: str, *, by_name: bool = False
+                 ) -> dict[str, list[Fingerprint]]:
     """Key → the fingerprints of the records under it, in the order the backup holds them."""
     fields = _FIELDS[kind]
     out: dict[str, list[Fingerprint]] = {}
     for r in getattr(backup, kind):
         fp = Fingerprint(tuple(get(r) for _, get in fields), digest(r.blob))
-        out.setdefault(_key(kind, r), []).append(fp)
+        out.setdefault(_key(kind, r, by_name), []).append(fp)
     return out
+
+
+def uncompared_fields(kind: str, before: frozenset[str], after: frozenset[str]
+                      ) -> frozenset[str]:
+    """The fields of `kind` one source has no column for (`Backup.absent`): left uncompared
+    rather than reported changed on every record."""
+    return frozenset(f for f, _ in _FIELDS[kind] if f in before ^ after)
+
+
+def _filed(backup: Backup) -> bool | None:
+    items = [*backup.rigs, *backup.presets]
+    return any(i.folder for i in items) if items else None
+
+
+def folders_on_one_side(before: Backup, after: Backup) -> bool:
+    """One source files rigs or presets in folders and the other holds some but files none (a
+    snapshot, a pack, a library's top level only), so by path the filed ones never pair."""
+    return {_filed(before), _filed(after)} == {True, False}
 
 
 def _align(before: list[Fingerprint], after: list[Fingerprint]
@@ -110,7 +131,7 @@ def _label(key: str, n: int, total: int) -> str:
 
 
 def compare(kind: str, before: dict[str, list[Fingerprint]],
-            after: dict[str, list[Fingerprint]]) -> Diff:
+            after: dict[str, list[Fingerprint]], *, skip: frozenset[str] = frozenset()) -> Diff:
     fields = _FIELDS[kind]
     added, removed, changed = [], [], []
     for key in sorted(set(before) | set(after)):
@@ -121,25 +142,30 @@ def compare(kind: str, before: dict[str, list[Fingerprint]],
         for i, j in sorted(pairs, key=lambda ij: ij[1]):
             x, y = b_fps[i], a_fps[j]
             rows = [FieldChange(f, u, v)
-                    for (f, _), u, v in zip(fields, x.values, y.values, strict=True) if u != v]
+                    for (f, _), u, v in zip(fields, x.values, y.values, strict=True)
+                    if f not in skip and u != v]
             if x.payload != y.payload:
                 rows.append(FieldChange("payload", x.payload, y.payload))
             if rows:
                 changed.append(Changed(_label(key, j + 1, len(a_fps)), rows))
-    return Diff(added=sorted(added), removed=sorted(removed), changed=changed)
+    return Diff(added=sorted(added), removed=sorted(removed), changed=changed,
+                uncompared=sorted(skip))
 
 
-def _diff(kind: str, before: Backup, after: Backup) -> Diff:
-    return compare(kind, fingerprints(before, kind), fingerprints(after, kind))
+def _diff(kind: str, before: Backup, after: Backup, by_name: bool = False) -> Diff:
+    both = getattr(before, kind) and getattr(after, kind)
+    skip = uncompared_fields(kind, before.absent, after.absent) if both else frozenset()
+    return compare(kind, fingerprints(before, kind, by_name=by_name),
+                   fingerprints(after, kind, by_name=by_name), skip=skip)
 
 
-def diff_rigs(before: Backup, after: Backup) -> Diff:
-    return _diff("rigs", before, after)
+def diff_rigs(before: Backup, after: Backup, *, by_name: bool = False) -> Diff:
+    return _diff("rigs", before, after, by_name)
 
 
 def diff_performances(before: Backup, after: Backup) -> Diff:
     return _diff("performances", before, after)
 
 
-def diff_presets(before: Backup, after: Backup) -> Diff:
-    return _diff("presets", before, after)
+def diff_presets(before: Backup, after: Backup, *, by_name: bool = False) -> Diff:
+    return _diff("presets", before, after, by_name)

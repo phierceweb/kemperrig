@@ -25,8 +25,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: ruff check src tests
-      - run: python -m pf_core.guards --root src
-      - run: python -m pf_core.guards --root tests
+      - run: python -m pw_foundation.guards --root src
+      - run: python -m pw_foundation.guards --root tests
       - run: pytest -v
 
   package:

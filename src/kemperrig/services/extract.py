@@ -10,10 +10,11 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
-from pf_core.utils.io import atomic_write_bytes
+from pw_foundation.utils.io import atomic_write_bytes
 
 from kemperrig import _sysex
-from kemperrig.model import Rig, is_same_file, write_refusal
+from kemperrig._guard import is_same_file, write_refusal
+from kemperrig.model import Rig
 
 SUFFIX = ".krig"
 _MAX_STEM_BYTES = 200

@@ -104,40 +104,40 @@ class BrokenPayloadTest(unittest.TestCase):
 class GainMismatchTest(unittest.TestCase):
     def test_a_decoded_gain_off_by_more_than_display_rounding_is_reported(self):
         b = _backup(rigs=[_rig("Off", gain="6.0", amp=5.0), _rig("On", gain="5.0", amp=5.0)])
-        [found] = doctor.gain_mismatches(b)
+        [found] = doctor.gain_mismatches(doctor.parse(b))
         self.assertEqual(found.rig.name, "Off")
         self.assertAlmostEqual(found.decoded, 5.0, places=2)
 
     def test_one_decimal_rounding_at_the_boundary_agrees(self):
         b = _backup(rigs=[_rig("Edge", gain="3.0", amp=2.9498)])
-        self.assertEqual(doctor.gain_mismatches(b), [])
+        self.assertEqual(doctor.gain_mismatches(doctor.parse(b)), [])
 
     def test_just_past_the_rounding_is_reported(self):
         b = _backup(rigs=[_rig("Past", gain="3.0", amp=3.06)])
-        self.assertEqual([m.rig.name for m in doctor.gain_mismatches(b)], ["Past"])
+        self.assertEqual([m.rig.name for m in doctor.gain_mismatches(doctor.parse(b))], ["Past"])
 
     def test_no_amp_block_or_no_stored_gain_is_not_compared(self):
         b = _backup(rigs=[{"name": "Bare", "gain": "5.0", "blob": make_blob([rig_track("Bare")])},
                           {"name": "NoGain", "blob": make_blob([[amp_msg(5.0)]])}])
-        self.assertEqual(doctor.gain_mismatches(b), [])
+        self.assertEqual(doctor.gain_mismatches(doctor.parse(b)), [])
 
 
 class NameMismatchTest(unittest.TestCase):
     def test_a_rig_whose_payload_carries_another_name(self):
         b = _backup(rigs=[_rig("Listed", payload_name="Played"), _rig("Same")])
-        [found] = doctor.name_mismatches(b)
+        [found] = doctor.name_mismatches(doctor.parse(b))
         self.assertEqual((found.rig.name, found.payload, found.slot), ("Listed", "Played", None))
 
     def test_a_slot_whose_track_carries_another_name(self):
         perf = _perf("Set", "Old")
         perf["slots"][0]["rig_name"] = "New"
         b = _backup(rigs=[_rig("New")], performances=[perf])
-        [found] = doctor.name_mismatches(b)
+        [found] = doctor.name_mismatches(doctor.parse(b))
         self.assertEqual((found.slot, found.payload), (doctor.SlotRef("Set", 1, "New"), "Old"))
 
     def test_surrounding_whitespace_is_not_a_mismatch(self):
         b = _backup(rigs=[_rig("Name ", payload_name="Name")])
-        self.assertEqual(doctor.name_mismatches(b), [])
+        self.assertEqual(doctor.name_mismatches(doctor.parse(b)), [])
 
     def test_rename_leaves_no_name_behind(self):
         with tempfile.TemporaryDirectory() as d:
@@ -145,7 +145,7 @@ class NameMismatchTest(unittest.TestCase):
                                  performances=[_perf("Set", "Old")])
             out = os.path.join(d, "b.rmbackup")
             rename_rig(src, out, "Old", "New")
-            self.assertEqual(doctor.name_mismatches(Backup.open(out)), [])
+            self.assertEqual(doctor.name_mismatches(doctor.parse(Backup.open(out))), [])
 
 
 class UnusedCabIrTest(unittest.TestCase):
@@ -155,13 +155,13 @@ class UnusedCabIrTest(unittest.TestCase):
                     presets=[_cab("InRig"), _cab("InSlot"), _cab("Idle"),
                              {"name": "Fx", "preset_class": "3",
                               "blob": make_blob([[string_msg("Fx", 0x20)]])}])
-        self.assertEqual([p.name for p in doctor.unused_cab_irs(b)], ["Idle"])
+        self.assertEqual([p.name for p in doctor.unused_cab_irs(doctor.parse(b))], ["Idle"])
 
     def test_a_cab_ir_whose_own_name_is_unreadable_is_not_claimed_unused(self):
         b = _backup(rigs=[_rig("R")],
                     presets=[{"name": "Nameless", "preset_class": "6",
                               "blob": make_blob([[string_msg("x.wav", 0x27)]])}])
-        self.assertEqual(doctor.unused_cab_irs(b), [])
+        self.assertEqual(doctor.unused_cab_irs(doctor.parse(b)), [])
 
 
 class CheckupTest(unittest.TestCase):
@@ -201,6 +201,39 @@ class CheckupTest(unittest.TestCase):
         b = _backup(rigs=[_rig("A")], performances=[_perf("Set", "A", "Pulled")])
         found = doctor.checkup(b, device=_backup(rigs=[_rig("Pulled")]))
         self.assertFalse(found.defective)
+
+
+class ParseOnceTest(unittest.TestCase):
+    def test_checkup_walks_each_payload_once(self):
+        b = _backup(rigs=[_rig("A", cab="Ir"), _rig("B")],
+                    performances=[_perf("Set", "A", cabs={"A": "Ir"})], presets=[_cab("Ir")])
+        with mock.patch.object(_sysex, "_chunks", wraps=_sysex._chunks) as walks:
+            doctor.checkup(b)
+        self.assertEqual(walks.call_count, 4)
+
+
+def _ir(name: str, cab: str, wav: str, *, folder: str = "Cabs") -> dict:
+    return {"name": name, "folder": folder, "preset_class": "6",
+            "blob": make_blob([[string_msg(cab, 0x20), string_msg(wav, 0x27)]])}
+
+
+class SharedCabNameTest(unittest.TestCase):
+    def test_different_irs_under_one_cab_name_are_listed(self):
+        b = _backup(rigs=[_rig("A")], presets=[_ir("V30 a", "V30", "a.wav"),
+                                               _ir("V30 b", "V30", "b.wav"),
+                                               _ir("Green", "Green", "g.wav")])
+        [s] = doctor.shared_cab_names(doctor.parse(b))
+        self.assertEqual((s.name, [p.name for p in s.presets]), ("V30", ["V30 a", "V30 b"]))
+
+    def test_one_ir_filed_twice_is_not(self):
+        b = _backup(rigs=[_rig("A")], presets=[_ir("V30", "V30", "a.wav", folder="X"),
+                                               _ir("V30", "V30", "a.wav", folder="Y")])
+        self.assertEqual(doctor.shared_cab_names(doctor.parse(b)), [])
+
+    def test_it_is_informational(self):
+        b = _backup(rigs=[_rig("A")], presets=[_ir("V30 a", "V30", "a.wav"),
+                                               _ir("V30 b", "V30", "b.wav")])
+        self.assertFalse(doctor.checkup(b).defective)
 
 
 if __name__ == "__main__":

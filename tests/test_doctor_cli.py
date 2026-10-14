@@ -9,7 +9,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 from _fixture import build_rmbackup, build_snapshot
-from _payloads import amp_msg, make_blob, performance_blob, rig_track
+from _payloads import amp_msg, make_blob, performance_blob, rig_track, string_msg
 
 from kemperrig.cli import main
 
@@ -80,7 +80,7 @@ class DoctorCliTest(unittest.TestCase):
         self.assertIsNone(doc["informational"]["device_only_slots"])
         self.assertEqual(set(doc["informational"]),
                          {"device_only_slots", "unread_payloads", "gain_mismatches",
-                          "name_mismatches", "unused_cab_irs"})
+                          "name_mismatches", "unused_cab_irs", "shared_cab_names"})
 
     def test_device_backup_moves_a_slot_to_the_device_and_passes_strict(self):
         lib = self._lib(rigs=[_rig("A")], performances=[_perf("Set", "A", "Pulled")])
@@ -105,6 +105,39 @@ class DoctorCliTest(unittest.TestCase):
         code, out, _ = _run(["doctor"], env={"KEMPERRIG_LIBRARY": lib})
         self.assertEqual(code, 0)
         self.assertIn("1 rigs", out)
+
+
+class RiglessSourceTest(unittest.TestCase):
+    def test_a_source_with_no_rigs_says_why_every_slot_dangles(self):
+        with tempfile.TemporaryDirectory() as d:
+            snap = build_snapshot(os.path.join(d, "snap.db"), performances=[_perf("P", "Gone")])
+            code, out, _ = _run(["doctor", snap])
+            self.assertEqual(code, 0)
+            self.assertIn("this source holds no rigs", out)
+
+    def test_no_note_when_a_device_backup_holds_the_slots(self):
+        with tempfile.TemporaryDirectory() as d:
+            snap = build_snapshot(os.path.join(d, "snap.db"),
+                                  performances=[_perf("P", "Pulled", "Gone")])
+            dev = build_rmbackup(os.path.join(d, "dev.rmbackup"), rigs=[_rig("Pulled")])
+            code, out, _ = _run(["doctor", snap, "--device-backup", dev])
+            self.assertIn("on the device only: 1", out)
+            self.assertNotIn("holds no rigs", out)
+
+    def test_shared_cab_names_reach_the_view_and_json(self):
+        def ir(name: str, wav: str) -> dict:
+            return {"name": name, "folder": "Cabs", "preset_class": "6",
+                    "blob": make_blob([[string_msg("V30", 0x20), string_msg(wav, 0x27)]])}
+
+        with tempfile.TemporaryDirectory() as d:
+            lib = build_rmbackup(os.path.join(d, "l.rmbackup"), rigs=[_rig("A")],
+                                 presets=[ir("V30 a", "a.wav"), ir("V30 b", "b.wav")])
+            code, out, _ = _run(["doctor", lib])
+            self.assertIn("cab IRs sharing a name: 1", out)
+            code, out, _ = _run(["doctor", lib, "--json"])
+            [shared] = json.loads(out)["informational"]["shared_cab_names"]
+            self.assertEqual((shared["name"], [p["name"] for p in shared["presets"]]),
+                             ("V30", ["V30 a", "V30 b"]))
 
 
 if __name__ == "__main__":

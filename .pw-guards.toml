@@ -1,0 +1,9 @@
+# Structural gate policy — read by default by `python -m pw_foundation.guards`.
+#
+# Deliberately empty. Limits are the GuardsConfig defaults in pw_foundation/guards/config.py;
+# `bin/run lint` and .github/workflows/ci.yml each pass --root explicitly (src, then
+# tests), so a `root` key here would be dead config.
+#
+# No [tool.pw_guards.baseline] table: every file is under the soft limit. If one ever
+# isn't, split the file — do not grandfather it.
+[tool.pw_guards]

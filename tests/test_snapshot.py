@@ -128,7 +128,8 @@ class SnapshotCommandsTest(unittest.TestCase):
             backup = build_rmbackup(os.path.join(d, "lib.rmbackup"), rigs=[RIG],
                                     performances=[PERF])
             code, out, err = _run(["diff", snap, backup])
-            self.assertEqual((code, err), (1, ""))
+            self.assertEqual(code, 1)
+            self.assertIn("--by-name", err)
             self.assertNotIn("performances", out)
 
     def test_a_folderless_rig_is_keyed_by_its_bare_name_everywhere(self):
@@ -143,6 +144,27 @@ class SnapshotCommandsTest(unittest.TestCase):
             later = _snap(d, name="DEVICE - 2024-01-03 03-04-05R2.db", rigs=[], performances=[])
             self.assertEqual(json.loads(_run(["diff", p, later, "--json"])[1])["rigs"]["removed"],
                              ["Crunch", "Cut"])
+
+
+class RawColumnsTest(unittest.TestCase):
+    def test_a_snapshot_rig_carries_kpaid_and_a_performance_prog_nr(self):
+        with tempfile.TemporaryDirectory() as d:
+            b = Backup.open(_snap(d, rigs=[{**RIG, "kpaid": "7"}],
+                                  performances=[{**PERF, "prog_nr": "12"}]))
+            self.assertEqual((b.rigs[0].kpaid, b.performances[0].prog_nr), ("7", "12"))
+
+    def test_a_library_has_neither(self):
+        with tempfile.TemporaryDirectory() as d:
+            b = Backup.open(build_rmbackup(os.path.join(d, "l.rmbackup"), rigs=[RIG],
+                                           performances=[PERF]))
+            self.assertEqual((b.rigs[0].kpaid, b.performances[0].prog_nr), (None, None))
+
+    def test_json_carries_them(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = _snap(d, rigs=[{**RIG, "kpaid": "7"}], performances=[{**PERF, "prog_nr": "12"}])
+            [rig] = json.loads(_run(["rigs", p, "--json"])[1])["rigs"]
+            [perf] = json.loads(_run(["performances", p, "--json"])[1])["performances"]
+            self.assertEqual((rig["kpaid"], perf["prog_nr"]), ("7", "12"))
 
 
 if __name__ == "__main__":

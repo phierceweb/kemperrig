@@ -15,6 +15,7 @@ Entry point:
               ├─ _tables.py        SQLite rows in, records out
               ├─ _packs.py         rig/preset pack rows in, a Pack record out
               ├─ _archive.py       open the zip, read one entry, bounded and damage-checked
+              ├─ _guard.py         where a writer may write: never the source, an alias, or a library
               └─ records.py        Rig / Performance / Slot / Preset / Info
             _sysex.py              KThd/KTrk blob decode, standalone
               ├─ _sysex_effects.py module blocks: raw pages, effect chains
@@ -39,7 +40,7 @@ drifted before.
 | **Views** (`_views/`) | Formatting command output for a terminal | I/O of any kind; deciding what to compute |
 | **JSON** (`_json/`) | Building `--json` documents | I/O beyond `print`; diverging from `_views` without a reason |
 | **Service** (`services/`) | One concern per module; take records, return plain values | Import from `cli`, `_views` or `_json`; `print()`; read `os.environ` |
-| **Domain** (`model.py`, `_archive.py`, `_tables.py`, `_packs.py`, `_sysex.py`, `_sysex_effects.py`, `_sysex_edit.py`) | The container layout, the SQLite tables, the blob framing | Import from any layer above; know what a command does |
+| **Domain** (`model.py`, `_archive.py`, `_guard.py`, `_tables.py`, `_packs.py`, `_sysex.py`, `_sysex_effects.py`, `_sysex_edit.py`) | The container layout, the SQLite tables, the blob framing | Import from any layer above; know what a command does |
 | **Records** (`records.py`) | The frozen dataclasses and the properties derived from their own fields | Import anything from this package |
 
 ---
@@ -66,7 +67,7 @@ drifted before.
   `services/edit.py` (a new archive), `services/extract.py` (`.krig` files) and
   `services/census.py` (`summary --write-golden`, a JSON census). Each keeps its guard
   `refusal` in the service and its writer runs it itself, so a direct caller is guarded
-  too; `model.write_refusal` is the source/library check all three start from.
+  too; `_guard.write_refusal` is the source/library check all three start from.
   All three use `atomic_write_bytes`.
 
 ## Service layer
@@ -95,7 +96,7 @@ drifted before.
 
 - **The invariant.** Writing lives in exactly three files, so "nothing modifies a source" is
   provable by reading `services/edit.py`, `services/extract.py` and `services/census.py`
-  (writer and guard together) and `model.write_refusal`, not audited everywhere.
+  (writer and guard together) and `_guard.write_refusal`, not audited everywhere.
 - **Embeddability.** The library is stdlib-only, quiet, and importable — no logging config,
   no framework exceptions, no output — so it works from something other than this CLI.
 - **Testability.** Services take records and return values, so they test against the

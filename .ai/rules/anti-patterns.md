@@ -12,7 +12,7 @@ census. A `.rmbackup` is often the
 only copy of a library someone has. `cli/_write.py` refuses a rename output that aliases the
 source — case variants, symlinks, hardlinks, `..` — and an existing output without
 `--force`; `extract.refusal` (which `extract.write` re-checks itself) refuses a folder that
-is or lies inside the source or any Rig Manager tree (`model.library_root`), an output file
+is or lies inside the source or any Rig Manager tree (`_guard.library_root`), an output file
 that is the source even with `--force`, and existing files without it; `census.refusal`
 does the same for its one file, and refuses a folder.
 
@@ -113,10 +113,10 @@ CLI decides how it reaches the user. (See `framework-first.md`, `logging.md`.)
 
 ---
 
-## No `pf_core.exceptions` raised anywhere
+## No `pw_foundation.exceptions` raised anywhere
 
 The library *and* the CLI raise plain builtins. `tests/test_dependencies.py` pins the
-pf-core surface to `resolve_str` in the `cli/` package and `atomic_write_bytes` in
+pw-foundation surface to `resolve_str` in the `cli/` package and `atomic_write_bytes` in
 the three writers (`services/edit.py`, `services/extract.py`, `services/census.py`); importing an exception class fails the gate. (See `error-handling.md`.)
 
 ---
@@ -195,6 +195,6 @@ and import it. Don't duplicate.
 
 ## Also forbidden — full standard in the cross-referenced rule
 
-- `os.environ` reads outside the `cli/` package → `framework-first.md` (use `pf_core.utils.env`, at the CLI boundary only).
-- Files over the size limits ("monster files") → `project-structure.md` (split by concern; enforced by the `pf_core.guards` gate).
+- `os.environ` reads outside the `cli/` package → `framework-first.md` (use `pw_foundation.utils.env`, at the CLI boundary only).
+- Files over the size limits ("monster files") → `project-structure.md` (split by concern; enforced by the `pw_foundation.guards` gate).
 - A code change that leaves `README.md` or `CHANGELOG.md` describing the old behaviour → `docs-sync.md`.

@@ -3,8 +3,8 @@
 **Every CLI failure is one line on stderr and a non-zero exit. Never a traceback.** That is
 the promise in `CONTRIBUTING.md` and `CLAUDE.md`, and it is what these rules exist to keep.
 
-The library raises **builtins**. It does not use `pf_core.exceptions` — those carry HTTP
-semantics this project has no use for, and `tests/test_dependencies.py` pins the pf_core
+The library raises **builtins**. It does not use `pw_foundation.exceptions` — those carry HTTP
+semantics this project has no use for, and `tests/test_dependencies.py` pins the pw_foundation
 surface to two symbols, so importing them turns the suite red.
 
 ---

@@ -201,6 +201,17 @@ class RefusedTest(_Case):
         self.assertTrue((self.out / "Clean.krig").is_symlink())
 
 
+class FolderlessExtractTest(unittest.TestCase):
+    def test_folder_on_a_snapshot_is_one_line_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            snap = build_snapshot(os.path.join(d, "snap.db"), rigs=RIGS[:2])
+            out = os.path.join(d, "out")
+            code, _, err = _run(["extract", snap, "-o", out, "--folder", "Amps"])
+            self.assertEqual(code, 1)
+            self.assertEqual(err.count("\n"), 1)
+            self.assertIn("--folder 'Amps': no rig here is filed", err)
+            self.assertFalse(os.path.exists(out))
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -238,3 +249,4 @@ class DecodeSelectionTest(unittest.TestCase):
         code, out, err = _run(["extract", self.lib, "-o", str(self.out), "--all", "--json"])
         self.assertEqual(code, 0, err)
         self.assertNotIn("unchecked", json.loads(out))
+

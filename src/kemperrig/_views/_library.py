@@ -123,10 +123,10 @@ def render_rigs(rigs: list[Rig], *, title: str = "rigs", selection: Selection | 
 
 def render_presets(presets: list[Preset]) -> str:
     cabs = [p for p in presets if p.is_cab_ir]
-    effects = [p for p in presets if p.preset_type]
+    effects = [p for p in presets if p.is_effect]
     other = len(presets) - len(cabs) - len(effects)
     lines = [f"presets: {len(presets)}  (cab-IR {len(cabs)} · effects {len(effects)} · other {other})"]
-    by_type = Counter(p.preset_type for p in effects)
+    by_type = Counter(p.preset_type or "(type not decoded)" for p in effects)
     if by_type:
         lines.append("  effect presets by type:")
         for t, n in by_type.most_common():

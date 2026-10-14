@@ -265,3 +265,4 @@ class RenameDestinationTest(unittest.TestCase):
             src = _lib(d)
             with self.assertRaises(ValueError):
                 rename_rig(src, src, "A", "B", force=True)
+

@@ -118,7 +118,11 @@ def _presets() -> list[dict]:
     def cab(name: str) -> dict:
         return {"name": name, "preset_class": "6",
                 "blob": make_blob([[string_msg(name, 0x20)]])}
-    return [cab(_CAB), cab("Cab Greenback"),
+    def shared(name: str, wav: str) -> dict:
+        return {"name": name, "preset_class": "6",
+                "blob": make_blob([[string_msg("Cab Shared", 0x20), string_msg(wav, 0x27)]])}
+    return [cab(_CAB), cab("Cab Greenback"), shared("Cab Shared A", "Shared A.wav"),
+            shared("Cab Shared B", "Shared B.wav"),
             {"name": "Delay Long", "preset_class": "2", "preset_type": "Delay",
              "blob": make_blob([[module_msg(0x3c, [164, 0, 0, 1])]])}]
 
@@ -181,7 +185,7 @@ def build_sample(dest: str | Path) -> SamplePaths:
 
 
 def _refusal(dest: Path, force: bool) -> str | None:
-    from kemperrig.model import library_root
+    from kemperrig._guard import library_root
     if library_root(dest) is not None:
         return f"{dest}: inside a Rig Manager library — choose another folder"
     if dest.exists() and not dest.is_dir():

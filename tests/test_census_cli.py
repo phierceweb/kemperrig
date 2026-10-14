@@ -2,6 +2,7 @@
 writes nothing and leaves the source byte-identical."""
 
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from _fixture import build_rmbackup
 from _payloads import amp_msg, make_blob, rig_track
 
 from kemperrig import _json
+from kemperrig._json._census import _CENSUS_COMMENT
 from kemperrig.cli import main
 from kemperrig.model import Backup
 from kemperrig.services import census
@@ -150,6 +152,45 @@ class RefusalTest(_Case):
     def test_the_writer_guards_a_direct_caller(self):
         with self.assertRaises(ValueError):
             census.write("{}\n", self.lib, source=self.lib, force=True)
+
+
+class KeepCommentTest(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs os.mkfifo")
+    def test_a_fifo_at_the_path_is_replaced_not_read(self):
+        with tempfile.TemporaryDirectory() as d:
+            lib = build_rmbackup(os.path.join(d, "lib.rmbackup"), rigs=RIGS)
+            out = os.path.join(d, "census.json")
+            os.mkfifo(out)
+            self.assertIsNone(census.existing_comment(out))
+            code, _, err = _run(["summary", lib, "--write-golden", out, "--force"])
+            self.assertEqual((code, err), (0, ""))
+            self.assertTrue(Path(out).is_file())
+
+    def test_force_keeps_the_comment_already_there(self):
+        with tempfile.TemporaryDirectory() as d:
+            lib = build_rmbackup(os.path.join(d, "lib.rmbackup"), rigs=RIGS)
+            out = os.path.join(d, "census.json")
+            self.assertEqual(_run(["summary", lib, "--write-golden", out])[0], 0)
+            doc = json.loads(Path(out).read_text())
+            doc["_comment"] = "mine"
+            Path(out).write_text(json.dumps(doc))
+            self.assertEqual(_run(["summary", lib, "--write-golden", out, "--force"])[0], 0)
+            self.assertEqual(json.loads(Path(out).read_text())["_comment"], "mine")
+
+    def test_anything_else_gets_the_default(self):
+        cases = [b"not json", b"\xff\xfe\x00", b"[]", b'{"_comment": "x"}',
+                 b'{"census": 1, "_comment": 5}', b"[" * 200_000,
+                 b'{"census": 1, "_comment": "\\ud800"}']
+        with tempfile.TemporaryDirectory() as d:
+            lib = build_rmbackup(os.path.join(d, "lib.rmbackup"), rigs=RIGS)
+            out = os.path.join(d, "census.json")
+            for raw in cases:
+                with self.subTest(raw=raw):
+                    Path(out).write_bytes(raw)
+                    code, _, err = _run(["summary", lib, "--write-golden", out, "--force"])
+                    self.assertEqual((code, err), (0, ""))
+                    self.assertEqual(json.loads(Path(out).read_text())["_comment"],
+                                     _CENSUS_COMMENT)
 
 
 if __name__ == "__main__":

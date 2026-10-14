@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pf_core.utils.env import resolve_str
+from pw_foundation.utils.env import resolve_str
 
 from .. import _json, _views
 from ..model import Backup

@@ -138,6 +138,16 @@ def effect_categories(found: Payloads) -> list[tuple[str, int]]:
     return counter.most_common()
 
 
+def undecoded_slots(found: Payloads) -> list[tuple[str, int]]:
+    """Module slots present only in the function-08 framing, per slot, most first — what
+    `effect_categories` cannot count, with or without Rig Manager's table."""
+    counter: Counter[str] = Counter()
+    for _, tracks in found.rigs:
+        counter.update(e.slot for e in _sysex_effects.effect_chain(_messages(tracks or []))
+                       if not e.decoded)
+    return counter.most_common()
+
+
 @dataclass(frozen=True)
 class Unparsed:
     rigs: list[Rig]
@@ -177,6 +187,7 @@ class Analysis:
     identical_profiles: list[list[Rig]]
     drive: dict[str, int]
     effect_categories: list[tuple[str, int]]
+    effects_undecoded: list[tuple[str, int]]
     ir_inventory: list[tuple[str, int]]
     misordered: list[tuple[Performance, list[float | None]]]
     unparsed: Unparsed
@@ -203,5 +214,6 @@ def analysis(backup: Backup, *, rack_folder: str | None = None) -> Analysis:
         coverage=amp_coverage(backup), similar=similar_groups(backup),
         identical_amps=identical_amp_groups(found),
         identical_profiles=identical_profiles(backup), drive=drive_breakdown(backup),
-        effect_categories=effect_categories(found), ir_inventory=ir_inventory(found),
+        effect_categories=effect_categories(found), effects_undecoded=undecoded_slots(found),
+        ir_inventory=ir_inventory(found),
         misordered=non_monotonic_performances(backup), unparsed=unparsed(found))

@@ -56,9 +56,10 @@ see `.env.example` in the repository.
 Every failure is one line on stderr, prefixed `kemperrig:`, never a traceback. Output stays
 clean for `--json`, and a closed pipe (`| head`) exits 0.
 
-A damaged, encrypted or unsupported archive entry is such a failure, and so is one that would
-inflate past 1 GiB, or past 100:1 beyond 16 MiB — no Rig Manager database comes close. The
-message names the entry and the archive; `history` skips that file and reads the rest.
+A damaged, encrypted or unsupported archive entry is such a failure, as is a database the
+archive holds twice (Rig Manager writes each once) and an entry that would inflate past 1 GiB,
+or past 100:1 beyond 16 MiB, which no Rig Manager database comes close to. The message names the
+entry and the archive; `history` skips that file and reads the rest.
 
 Names and strings come from files other people may have written, so text output shows any
 control character in them as `\xNN` rather than send it to the terminal. `--json` keeps
@@ -87,13 +88,17 @@ Filters, shared by `rigs` and `extract`:
 | `rigs --comment TEXT` | amp-comment substring |
 | `rigs --gain-min N` / `--gain-max N` | the `Gain` column, inclusive |
 | `rigs --di` / `--studio` | DI profiles only, or studio (cab-baked) profiles only |
-| `rigs --boosted` / `--unboosted` | by the boost the amp comment describes; rigs whose comment says nothing about drive match neither |
+| `rigs --boosted` / `--unboosted` | by the boost the amp comment describes; rigs whose comment says nothing about drive, or toggles a pedal and switches none on, match neither |
 | `rigs --effect TEXT` | a decoded effect whose type name or category contains `TEXT`, in any slot, on or off |
 | `rigs --ir TEXT` | a cab IR whose file name contains `TEXT` |
 
 Substring matches ignore case. With `--effect` or `--ir`, rigs the filter cannot judge — a
 payload that does not parse, or an undecoded slot that might hold the effect — are listed
 after the results (and under `unchecked` in `--json`), never silently dropped.
+
+On a source where no rig is in a folder — a snapshot, a pack, or a library with every rig at
+its top level — any non-empty `--folder` is an error rather than an empty result; so is
+`rig --folder` and `pages --folder`.
 
 `rig` refuses a name several rigs share: narrow it with `--folder`, or, where folders do not
 tell them apart, with `--payload` and a digest prefix the error lists.
@@ -135,8 +140,15 @@ A bare `--against` compares with `KEMPERRIG_LIBRARY`; put it after `PACKFILE`.
 
 | Usage | What it does |
 |---|---|
-| `diff BEFORE AFTER [--json]` | rigs, performances and presets added, removed or changed; exit 1 when they differ |
+| `diff BEFORE AFTER [--by-name] [--json]` | rigs, performances and presets added, removed or changed; exit 1 when they differ |
 | `history [SOURCE ...] [--order name\|mtime] [--rig NAME] [--json]` | counts and changes across dated snapshots and backups, each compared with the previous file from the same device |
+
+`diff` matches rigs and presets by folder and name; `--by-name` matches them by name alone,
+for a snapshot or a pack against a library; without the flag, `diff` says so on stderr when
+one source files rigs or presets in folders and the other files none. A column one source
+has no column for — a snapshot has no `Profile Type`, a pack no `Preset Class` — is listed as
+not compared rather than reported changed on every record; `history` leaves it uncompared the
+same way.
 
 `history` with no `SOURCE` reads the `Backups/` folder of `KEMPERRIG_LIBRARY`. A `SOURCE` is
 a snapshot or `.rmbackup` file, or a folder of them. `--rig NAME` lists every file holding a

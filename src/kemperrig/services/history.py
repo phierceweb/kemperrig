@@ -17,7 +17,15 @@ from kemperrig.model import (
     library_files,
     snapshot_device,
 )
-from kemperrig.services.diff import KINDS, Diff, Fingerprint, compare, digest, fingerprints
+from kemperrig.services.diff import (
+    KINDS,
+    Diff,
+    Fingerprint,
+    compare,
+    digest,
+    fingerprints,
+    uncompared_fields,
+)
 
 ORDERS = ("name", "mtime")
 
@@ -142,7 +150,8 @@ def history(paths: list[str], *, order: str = "name", rig: str | None = None) ->
     entries: list[Entry] = []
     skipped: list[tuple[str, str]] = []
     sightings: list[tuple[Source, list[str | None]]] = []
-    last: dict[str | None, tuple[Source, dict[str, dict[str, list[Fingerprint]]]]] = {}
+    last: dict[str | None,
+               tuple[Source, dict[str, dict[str, list[Fingerprint]]], frozenset[str]]] = {}
     for path in _sorted(collect(paths), order):
         source = describe(path)
         try:
@@ -152,6 +161,7 @@ def history(paths: list[str], *, order: str = "name", rig: str | None = None) ->
             continue
         prints = {kind: fingerprints(backup, kind) for kind in KINDS}
         totals = {kind: len(getattr(backup, kind)) for kind in KINDS}
+        absent = backup.absent
         if rig is not None:
             found = [digest(r.blob) for r in backup.rigs if r.name == rig]
             if found:
@@ -162,9 +172,12 @@ def history(paths: list[str], *, order: str = "name", rig: str | None = None) ->
             continue
         step = None
         if source.device in last:
-            since, before = last[source.device]
-            step = Step(since, {k: _counts(compare(k, before[k], prints[k])) for k in KINDS})
-        last[source.device] = (source, prints)
+            since, before, lacked = last[source.device]
+            skips = {k: uncompared_fields(k, lacked, absent) if before[k] and prints[k]
+                     else frozenset() for k in KINDS}
+            step = Step(since, {k: _counts(compare(k, before[k], prints[k], skip=skips[k]))
+                                for k in KINDS})
+        last[source.device] = (source, prints, absent)
         entries.append(Entry(source, totals, step))
     return History(order=order, entries=entries, skipped=skipped,
                    rig=None if rig is None else _rig_history(rig, sightings))

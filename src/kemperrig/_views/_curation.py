@@ -47,9 +47,14 @@ def render_analysis(a: Analysis) -> str:
                 else f"gain {c.gain_min}-{c.gain_max}")
         lines.append(f"    {amp[:30]:30s} n={c.count:3d}  {span}  missing: {miss}")
 
+    if a.effect_categories or a.effects_undecoded:
+        lines.append("")
     if a.effect_categories:
         top = "  ".join(f"{c} {n}" for c, n in a.effect_categories[:8])
-        lines.append(f"\n  effect slots by category: {top}")
+        lines.append(f"  effect slots by category: {top}")
+    if a.effects_undecoded:
+        slots = "  ".join(f"{s} {n}" for s, n in a.effects_undecoded)
+        lines.append(f"  undecoded effect slots (function-08): {slots}")
 
     lines.append(f"\n  cab IRs in use: {len(a.ir_inventory)} distinct")
     for name, n in a.ir_inventory[:10]:

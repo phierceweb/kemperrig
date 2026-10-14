@@ -11,6 +11,7 @@ kemperrig/
 │   ├── _packs.py               # rig/preset pack rows in, a Pack record out
 │   ├── model.py                # Backup — the container and its entry points (zip / live / snapshot / pack)
 │   ├── _archive.py             # open the zip, read one entry, bounded and damage-checked
+│   ├── _guard.py               # where a writer may write: never the source, an alias, or a library
 │   ├── _sysex.py               # KThd/KTrk blob decode
 │   ├── _sysex_effects.py       # module blocks: raw pages, effect chains
 │   ├── _sysex_edit.py          # rewrite one string in a blob, byte-for-byte
@@ -47,7 +48,7 @@ and `model.py` needs both, so the dataclasses live below both.
   filtering, shortlisting, diffing, renaming. If a name needs "and" in it, it is two files.
 - **No `sys.path` hacks.** src-layout plus an editable install (`bin/run setup`).
 - **No config module.** Runtime input is CLI arguments, with `KEMPERRIG_*` env vars read
-  through `pf_core.utils.env.resolve_str` in the `cli/` package as the fallback. Services never read
+  through `pw_foundation.utils.env.resolve_str` in the `cli/` package as the fallback. Services never read
   the environment — they take the resolved value as a parameter (`analyze`'s `rack_folder`).
 - **Nothing about one person's rig is a constant.** A library path, a criteria file, a
   folder name someone can rename in Rig Manager: all resolve at the boundary. Format
@@ -57,10 +58,10 @@ and `model.py` needs both, so the dataclasses live below both.
 
 ## File size limits
 
-The build gate (`python -m pf_core.guards`, run by `bin/run lint` and by CI) enforces a
+The build gate (`python -m pw_foundation.guards`, run by `bin/run lint` and by CI) enforces a
 flat soft-WARN / hard-FAIL budget across `src` and `tests`. **The canonical
 limit values are code, not this doc:** the `GuardsConfig` defaults in
-`pf_core/guards/config.py`. Split past the soft target by concern.
+`pw_foundation/guards/config.py`. Split past the soft target by concern.
 
 | Over its limit | Action |
 |---|---|
@@ -77,13 +78,13 @@ When splitting a file:
 - Update the package `__init__.py` to re-export if needed
 - `grep -r` the old import paths to catch all callers
 
-## Dependency on pf-core
+## Dependency on pw-foundation
 
 In `pyproject.toml`:
 ```toml
 [project]
 dependencies = [
-    "pf-core~=0.25.0",  # pin the current minor (see CHANGELOG)
+    "pw-foundation~=1.0",  # every 1.x release; the line is additive-only
 ]
 ```
 

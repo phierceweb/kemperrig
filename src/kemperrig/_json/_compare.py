@@ -15,8 +15,11 @@ def _diff(d: Diff) -> dict:
                                      for f in c.changes]}
                         for c in d.changed]}
 
-def diff_doc(rigs: Diff, performances: Diff, presets: Diff) -> dict:
+def diff_doc(rigs: Diff, performances: Diff, presets: Diff, *, by_name: bool = False) -> dict:
     return {"identical": rigs.empty and performances.empty and presets.empty,
+            "matched_by": "name" if by_name else "path",
+            "uncompared": {"rigs": rigs.uncompared, "performances": performances.uncompared,
+                           "presets": presets.uncompared},
             "rigs": _diff(rigs), "performances": _diff(performances),
             "presets": _diff(presets)}
 

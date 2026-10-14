@@ -4,15 +4,17 @@ and the third writer, which saves one to a file.
 
 from __future__ import annotations
 
+import json
 import os
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from pf_core.utils.io import atomic_write_bytes
+from pw_foundation.utils.io import atomic_write_bytes
 
 from kemperrig import _sysex, _sysex_effects
-from kemperrig.model import Backup, Performance, Rig, names_folder, write_refusal
+from kemperrig._guard import names_folder, write_refusal
+from kemperrig.model import Backup, Performance, Rig
 from kemperrig.services.diff import digest
 from kemperrig.services.doctor import Checkup, checkup
 from kemperrig.services.performance import gain_ladder, rig_gain_index, slot_tracks
@@ -114,6 +116,26 @@ def take(backup: Backup) -> Census:
         rig=_sample_rig(parsed),
         performance=_sample_performance(backup),
     )
+
+
+_COMMENT_SOURCE_MAX = 1 << 20
+
+
+def existing_comment(path: str | Path) -> str | None:
+    """The `_comment` of a census already at `path`, which `--force` keeps; None unless
+    `path` is a regular file of at most 1 MiB holding a census whose comment is text."""
+    target = Path(path)
+    try:
+        if not target.is_file() or target.stat().st_size > _COMMENT_SOURCE_MAX:
+            return None
+        doc = json.loads(target.read_text(encoding="utf-8"))
+        comment = doc.get("_comment") if isinstance(doc, dict) and "census" in doc else None
+        if isinstance(comment, str):
+            comment.encode("utf-8")   # a lone surrogate parses but cannot be written back
+            return comment
+    except (OSError, ValueError, RecursionError):   # UnicodeError is a ValueError
+        pass
+    return None
 
 
 def refusal(path: str | Path, *, source: str, force: bool) -> str | None:

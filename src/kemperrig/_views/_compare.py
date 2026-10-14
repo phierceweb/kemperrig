@@ -19,7 +19,11 @@ def render_diff(rigs: Diff, performances: Diff, presets: Diff) -> str:
             out.append(f"  ~ {c.key}")
             for f in c.changes:
                 out.append(f"      {f.field}: {f.before!r} -> {f.after!r}")
-    return "\n".join(out) if out else "identical — no rig, performance or preset differences"
+    body = "\n".join(out) if out else "identical — no rig, performance or preset differences"
+    notes = [f"note: {label}: {', '.join(d.uncompared)} not compared — one source has no "
+             "such column" for label, d in (("rigs", rigs), ("performances", performances),
+                                            ("presets", presets)) if d.uncompared]
+    return "\n".join([body, *notes])
 
 
 _SHORT = {"rigs": "rigs", "performances": "perfs", "presets": "presets"}

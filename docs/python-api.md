@@ -54,7 +54,7 @@ bytes into an in-memory SQLite connection: nothing is extracted, nothing is writ
 - `Rig` — the metadata row (`name`, `folder`, `gain`, `amp_model`, `cabinet_name`, …) and
   `blob`, the payload. `path` is `folder/name` (the bare name without a folder), `is_di`
   reads the cab columns, and `is_boosted` reads `amp_comment` — `None` when the text says
-  nothing about drive.
+  nothing about drive, or toggles a pedal and switches none on.
 - `Performance` — `name`, `tempo`, five `Slot`s (`rig_name`, `amp_name`, `cab_name`, …) and
   `blob`.
 - `Preset` — `name`, `folder`, `preset_class` and the rest of the row; `is_cab_ir`.
@@ -86,9 +86,9 @@ Records never change: a service that needs a different view builds a new value.
 
 The library raises builtins and nothing else:
 
-- `ValueError` — a malformed file (a damaged, encrypted or oversized archive entry among
-  them), a payload that does not parse (`rig_detail` names the rig), criteria of the wrong
-  shape;
+- `ValueError` — a malformed file (a damaged, encrypted or oversized archive entry, or a
+  database held twice, among them), a payload that does not parse (`rig_detail` names the
+  rig), criteria of the wrong shape;
 - `KeyError` — a required table or column is missing;
 - `FileNotFoundError` — a path that is not a Rig Manager library;
 - `OSError`, `sqlite3.DatabaseError` — passed through from the file.

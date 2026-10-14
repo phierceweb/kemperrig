@@ -1,8 +1,8 @@
 # Logging
 
 **There is none, and that is deliberate.** The package has no `import logging`, no
-`pf_core.log`, no structlog, no logger anywhere. A read-only CLI that prints its result has
-nothing to log, and `tests/test_dependencies.py` pins the pf_core surface to
+`pw_foundation.log`, no structlog, no logger anywhere. A read-only CLI that prints its result has
+nothing to log, and `tests/test_dependencies.py` pins the pw_foundation surface to
 `resolve_str` + `atomic_write_bytes` — adding `setup_logging` or `get_logger` turns the
 suite red.
 

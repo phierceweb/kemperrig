@@ -34,7 +34,7 @@ problem on purpose:
 
 ```text
 $ kemperrig doctor Library.rmbackup
-doctor: 8 rigs · 3 performances, 7 slots · 2 cab IRs
+doctor: 8 rigs · 3 performances, 7 slots · 4 cab IRs
 definite (--strict exits 1 on any)
   dangling slots: 1  (no library rig has the name)
     Mixed Set · slot 3 · 'Gone Rig'
@@ -45,8 +45,12 @@ informational
   payloads with bytes nothing reads: 0  (damage, or an encoding not decoded)
   amp gain differs from the payload: 0
   name differs from the payload: 0
-  unused cab IRs: 1 of 2  (no rig or slot loads them)
+  unused cab IRs: 3 of 4  (no rig or slot loads them)
     Local Library/Cab Greenback
+    Local Library/Cab Shared A
+    Local Library/Cab Shared B
+  cab IRs sharing a name: 1  (different IRs; a rig loading the name could mean any)
+    'Cab Shared' — Local Library/Cab Shared A aa9d35e9f652, Local Library/Cab Shared B 53e85f555afb
 ```
 
 ## What it is
@@ -106,7 +110,7 @@ pipx install kemperrig
 ```
 
 Or `pip install kemperrig` into a virtual environment. Python 3.12 or newer, one dependency
-([pf-core](https://pypi.org/project/pf-core/)). Tested on macOS and Linux; Windows is
+([pw-foundation](https://pypi.org/project/pw-foundation/)). Tested on macOS and Linux; Windows is
 untested. Effect names are read at runtime from your own Rig Manager install, so nothing of
 Kemper's ships here. Setup, settings and platforms:
 [docs/installation.md](https://github.com/phierceweb/kemperrig/blob/main/docs/installation.md).
@@ -124,7 +128,7 @@ kemperrig analyze      [SOURCE] [--strict]            # orphans, coverage, dupli
 kemperrig doctor       [SOURCE] [--strict]            # dangling slots, broken payloads
 kemperrig shortlist    [SOURCE] --criteria FILE       # rigs on chosen amps above a gain floor
 kemperrig pack         PACKFILE [--against [LIBRARY]] # a pack, and what you already have
-kemperrig diff         BEFORE AFTER                   # what changed between two sources
+kemperrig diff         BEFORE AFTER [--by-name]       # what changed between two sources
 kemperrig history      [SOURCE ...] [--rig NAME]      # a library across dated snapshots
 kemperrig rename       [SOURCE] OLD NEW -o NEW.rmbackup     # a renamed copy
 kemperrig extract      [SOURCE] -o DIR (--all | filters)    # rigs as .krig files
@@ -158,7 +162,7 @@ The library is standard-library only, prints nothing, and raises plain builtins.
 git clone https://github.com/phierceweb/kemperrig && cd kemperrig
 bin/run setup               # venv, editable install
 bin/run pytest              # the suite — hermetic, needs no library
-bin/run lint                # ruff + the pf-core file-size gate
+bin/run lint                # ruff + the pw-foundation file-size gate
 bin/run sample /tmp/sample  # a synthetic library to try every command on
 ```
 
@@ -196,13 +200,13 @@ Not yet established:
 - Windows: kemperrig is untested there — see
   [Platforms](https://github.com/phierceweb/kemperrig/blob/main/docs/installation.md#platforms).
 
-## Built on pf-core
+## Built on pw-foundation
 
-kemperrig is built on [pf-core](https://github.com/phierceweb/pf-core)
-([PyPI](https://pypi.org/project/pf-core/)), a Python foundation for LLM-facing
-applications. kemperrig uses two of its utilities — atomic file writes and
-environment-variable resolution — and its structural gate, which fails the build when a file
-outgrows its line budget.
+kemperrig is built on [pw-foundation](https://github.com/phierceweb/pw-foundation)
+([PyPI](https://pypi.org/project/pw-foundation/)), a dependency-light Python foundation:
+logging, exceptions, configuration from the environment, pure utilities and a structural build
+gate. kemperrig uses two of its utilities — atomic file writes and environment-variable
+resolution — and the gate, which fails the build when a file outgrows its line budget.
 
 For other phierceweb projects, see [github.com/phierceweb](https://github.com/phierceweb).
 

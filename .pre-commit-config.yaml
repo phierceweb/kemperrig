@@ -9,9 +9,9 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-      - id: pf-guards
-        name: pf-core file-size gate
-        entry: bash -c '.venv/bin/python -m pf_core.guards --root src && .venv/bin/python -m pf_core.guards --root tests'
+      - id: pw-guards
+        name: pw-foundation file-size gate
+        entry: bash -c '.venv/bin/python -m pw_foundation.guards --root src && .venv/bin/python -m pw_foundation.guards --root tests'
         language: system
         pass_filenames: false
         always_run: true

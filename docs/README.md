@@ -27,7 +27,7 @@ these docs describe; `AGENTS.md` at the repository root is the guide for working
 | [census.md](census.md) | The census `summary --write-golden` writes, and the opt-in golden test |
 | [format.md](format.md) | The `.rmbackup` container, snapshots, packs, and the SysEx inside rig and performance payloads |
 
-`pf-core/`, when present, is a gitignored link to the installed pf-core's own docs, made by
+`pw-foundation/`, when present, is a gitignored link to the installed pw-foundation's own docs, made by
 `bin/run setup`.
 
 ## Adding a doc

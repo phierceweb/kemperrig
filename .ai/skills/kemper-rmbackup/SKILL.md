@@ -101,8 +101,9 @@ kemperrig rig  "<backup>" "<rig name>"      # decode one blob's strings
   `KEMPERRIG_STOMPS_XML` elsewhere to override. Without it, only a verified subset resolves.
 - **Preset Class is the kind discriminator.** `6` = cabinet IR, `3` = effect module.
 - **Boost is inferred, not stored.** It comes from free-text in `Amp Comment` (pedal names,
-  "Unboosted"). `is_boosted` is `None` when the text says nothing about drive — treat
-  `None` as unknown, never as False.
+  "Unboosted", "TS9 off"). `is_boosted` is `None` when the text says nothing about drive,
+  or toggles a pedal ("TS9 on/off") and switches none on — treat `None` as unknown, never as
+  False.
 - **DI vs studio profile** is `cabinet_name` being absent/`N/A`/`DIRECT`, not a flag.
   `Cabinet Type` (`rigs --json` → `cabinet_type`) looks like one and is not: DI rigs sit
   under more than one value, and one value mixes DI rigs with real merged cabs.
@@ -112,8 +113,10 @@ kemperrig rig  "<backup>" "<rig name>"      # decode one blob's strings
   lists them). `rename` rewrites every match.
 - **Snapshots are not library folders.** `Backups/*R2.db` is one bare SQLite db per dated
   snapshot, detected by the SQLite header, not the name. Its rigs and presets have no
-  folder, so `diff` against a `.rmbackup` or the live tree never aligns rigs or presets —
-  every one shows as removed and re-added; only performances (keyed by name) line up. Its
+  folder, so `diff` against a `.rmbackup` or the live tree pairs by path only the library's
+  top-level rigs, never its presets (each reads with a folder) — the rest show as removed and
+  re-added; `diff --by-name` pairs them by name, and performances (keyed by name) always line
+  up. Its
   `ROMPresets` table is factory content and is skipped. Snapshot file names start with a
   personal device id — never copy one into a tracked file.
 - **One `Backups/` folder mixes devices.** Several device ids interleave in time with

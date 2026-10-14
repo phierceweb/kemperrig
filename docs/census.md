@@ -34,7 +34,9 @@ kemperrig summary --write-golden census.json --force    # replace it, KEMPERRIG_
 ```
 
 Keys are sorted and floats rounded, so the same library always writes the same bytes and
-two censuses diff cleanly. Missing folders on the way to the path are created.
+two censuses diff cleanly. Missing folders on the way to the path are created. `--force`
+keeps the `_comment` of the census it replaces, so a note written there survives a rewrite;
+anything else — not a census, not a regular file, over 1 MiB — gets the default comment.
 
 Do not point it at anything precious: the write is refused, exit 2, for the source itself
 (even with `--force`), a path inside the source or any Rig Manager library, a folder, and an

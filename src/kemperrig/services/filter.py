@@ -10,6 +10,15 @@ def contains(haystack: str | None, needle: str) -> bool:
     return needle.lower() in (haystack or "").lower()
 
 
+def _folder_refusal(rigs: list[Rig], folder: str | None) -> str | None:
+    """A snapshot or a pack files no rig in a folder, and neither does a library holding
+    rigs only at its top level: `folder` can match none of them."""
+    if folder and rigs and not any(r.folder for r in rigs):
+        return (f"--folder {folder!r}: no rig here is filed in a folder, so it can match none "
+                "— drop --folder")
+    return None
+
+
 def filter_rigs(
     rigs: list[Rig],
     *,
@@ -28,6 +37,8 @@ def filter_rigs(
     """Return rigs matching every supplied predicate (AND). `names` matches whole names exactly,
     any of them. `di`/`boosted`: True keeps only that state, False keeps the opposite, None
     keeps all (boosted ignores rigs of unknown drive state)."""
+    if why := _folder_refusal(rigs, folder):
+        raise ValueError(why)
     out = []
     for r in rigs:
         if names is not None and r.name not in names:
@@ -61,6 +72,8 @@ def find_rig(rigs: list[Rig], name: str, *, folder: str | None = None,
     """The one rig called `name`, narrowed by a folder substring or a payload-digest prefix.
     Rigs sharing one non-empty payload are one answer. A missing or ambiguous name is a
     ValueError saying how to choose."""
+    if why := _folder_refusal(rigs, folder):
+        raise ValueError(why)
     matches = [r for r in rigs if r.name == name
                and (folder is None or contains(r.folder, folder))
                and (payload is None or (digest(r.blob) or "").startswith(payload.lower()))]

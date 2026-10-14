@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from kemperrig.model import Pack
+from kemperrig.model import Pack, Preset
 from kemperrig.records import library_path
 from kemperrig.services.pack import IN_LIBRARY, NAME_TAKEN, Placement, counts
 
@@ -27,6 +27,14 @@ def _status(p: Placement) -> str:
     return "new"
 
 
+def _kind(p: Preset) -> str | None:
+    if p.is_cab_ir:
+        return "cab IR"
+    if p.is_effect:
+        return "effect"
+    return f"class {p.preset_class}" if p.preset_class else None
+
+
 def render_pack(pack: Pack, placed: list[Placement] | None = None, *,
                 against: str | None = None) -> str:
     items = pack.rigs if pack.content == "rigs" else pack.presets
@@ -40,6 +48,10 @@ def render_pack(pack: Pack, placed: list[Placement] | None = None, *,
         lines.append(f"  against {against}: in library {c['in_library']} · new {c['new']} · "
                      f"name taken {c['name_taken']}")
     for i, item in enumerate(items):
-        line = _rig_line(item, folder=False) if pack.content == "rigs" else f"  {item.name[:34]:34s}"
+        if pack.content == "rigs":
+            line = _rig_line(item, folder=False) + (f"  [{item.instrument}]"
+                                                    if item.instrument else "")
+        else:
+            line = f"  {item.name[:34]:34s}" + (f"  [{kind}]" if (kind := _kind(item)) else "")
         lines.append(line + (f"  {_status(placed[i])}" if placed is not None else ""))
     return "\n".join(lines)

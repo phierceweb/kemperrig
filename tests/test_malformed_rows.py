@@ -3,8 +3,10 @@
 import io
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
+import zipfile
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
@@ -234,6 +236,42 @@ class BlobInATextColumnTest(unittest.TestCase):
                 code, out, _ = _run([*argv, "--json"])
                 self.assertIn(code, (0, 1))
                 json.loads(out)
+
+
+def _untyped_name(db: bytes) -> bytes:
+    """`db` with its Rigs "Name" column untyped, and rig B's name the number 7."""
+    con = sqlite3.connect(":memory:")
+    con.deserialize(db)
+    ddl = con.execute("SELECT sql FROM sqlite_master WHERE name = 'Rigs'").fetchone()[0]
+    con.executescript(f"ALTER TABLE Rigs RENAME TO old; {ddl.replace('\"Name\" TEXT', '\"Name\"')};"
+                      "INSERT INTO Rigs SELECT * FROM old; DROP TABLE old;"
+                      "UPDATE Rigs SET \"Name\" = 7 WHERE \"Name\" = 'B';")
+    data = con.serialize()
+    con.close()
+    return data
+
+
+class NumberInAnUntypedColumnTest(unittest.TestCase):
+    """A column with no type keeps a number as a number; it reads as its text."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        src = build_rmbackup(os.path.join(self.d, "src.rmbackup"), rigs=[_good("A"), _good("B")])
+        self.lib = os.path.join(self.d, "lib.rmbackup")
+        with zipfile.ZipFile(src) as zin, zipfile.ZipFile(self.lib, "w") as zout:
+            for info in zin.infolist():
+                data = zin.read(info)
+                zout.writestr(info.filename, _untyped_name(data)
+                              if info.filename.startswith("Local Library/") else data)
+
+    def test_the_name_reads_as_text(self):
+        self.assertEqual(sorted(r.name for r in Backup.open(self.lib).rigs), ["7", "A"])
+
+    def test_commands_that_sort_or_cut_names_run(self):
+        for argv in (["rigs", self.lib], ["analyze", self.lib], ["rigs", self.lib, "--json"]):
+            with self.subTest(argv=argv):
+                code, _, err = _run(argv)
+                self.assertEqual(code, 0, err)
 
 
 if __name__ == "__main__":

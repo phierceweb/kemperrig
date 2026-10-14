@@ -8,10 +8,13 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 
 from _fixture import build_rmbackup
+from _pack_fixture import build_pack, pack_rig
 
 from kemperrig.cli import main
 from kemperrig.model import Backup
-from kemperrig.services.diff import compare, diff_performances, diff_rigs, fingerprints
+from kemperrig.services.diff import (compare, diff_performances, diff_presets, diff_rigs,
+                                     fingerprints)
+from kemperrig.services.history import history
 
 RIG_A = {"name": "A", "gain": "5.0", "amp_model": "Dual Rectifier", "cabinet_name": "N/A"}
 RIG_B = {"name": "B", "gain": "7.0", "amp_model": "SLO 100", "cabinet_name": "N/A"}
@@ -182,6 +185,63 @@ class FingerprintTest(unittest.TestCase):
             self.assertFalse(any(isinstance(v, bytes) for fps in before.values()
                                  for fp in fps for v in (*fp.values, fp.payload)))
             self.assertEqual(compare("rigs", before, after), diff_rigs(a, b))
+
+
+class ColumnPresenceTest(unittest.TestCase):
+    OLD = ("Profile Revision", "Cabinet Type", "Cabinet Configuration")
+
+    def test_a_column_both_sides_carry_is_compared(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = Backup.open(_backup(d, "a.rmbackup", [RIG_A]))
+            b = Backup.open(_backup(d, "b.rmbackup",
+                                    [{**RIG_A, "profile_type": "2", "cabinet_type": "1"}]))
+            found = diff_rigs(a, b)
+            [c] = found.changed
+            self.assertEqual([f.field for f in c.changes], ["profile_type", "cabinet_type"])
+            self.assertEqual(found.uncompared, [])
+
+    def test_a_slot_new_on_one_side_is_never_skipped(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = Backup.open(_backup(d, "a.rmbackup", [RIG_A],
+                                    performances=[{"name": "P", "slots": [{"rig_name": "A"}]}]))
+            b = Backup.open(_backup(d, "b.rmbackup", [RIG_A], performances=[
+                {"name": "P", "slots": [{"rig_name": "A"}, {"rig_name": "B"}]}]))
+            [c] = diff_performances(a, b).changed
+            self.assertEqual([f.field for f in c.changes], ["slot 2"])
+
+    def test_a_null_column_both_sides_carry_is_compared(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = Backup.open(_backup(d, "a.rmbackup", [RIG_A], presets=[{"name": "D"}]))
+            b = Backup.open(_backup(d, "b.rmbackup", [RIG_A],
+                                    presets=[{"name": "D", "preset_type": "Delay"}]))
+            found = diff_presets(a, b)
+            self.assertEqual([[f.field for f in c.changes] for c in found.changed],
+                             [["preset_type"]])
+            self.assertEqual(found.uncompared, [])
+
+    def test_an_older_rig_manager_backup_names_the_columns_it_lacks(self):
+        with tempfile.TemporaryDirectory() as d:
+            old = Backup.open(build_rmbackup(os.path.join(d, "a.rmbackup"), rigs=[RIG_A, RIG_B],
+                                             omit_rig_columns=self.OLD))
+            new = Backup.open(_backup(d, "b.rmbackup", [RIG_A, RIG_B]))
+            found = diff_rigs(old, new)
+            self.assertTrue(found.empty)
+            self.assertEqual(found.uncompared,
+                             ["cabinet_configuration", "cabinet_type", "profile_revision"])
+
+    def test_history_leaves_them_uncompared_too(self):
+        with tempfile.TemporaryDirectory() as d:
+            old = build_rmbackup(os.path.join(d, "a.rmbackup"), rigs=[RIG_A, RIG_B],
+                                 omit_rig_columns=self.OLD)
+            new = _backup(d, "b.rmbackup", [RIG_A, RIG_B])
+            step = history([old, new]).entries[1].step
+            self.assertEqual(step.counts["rigs"].changed, 0)
+
+    def test_a_side_with_no_records_of_a_kind_skips_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            lib = Backup.open(_backup(d, "a.rmbackup", [RIG_A], presets=[{"name": "D"}]))
+            pack = Backup.open(build_pack(os.path.join(d, "p.rigpack"), rigs=[pack_rig("A")]))
+            self.assertEqual(diff_presets(lib, pack, by_name=True).uncompared, [])
 
 
 if __name__ == "__main__":

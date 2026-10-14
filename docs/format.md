@@ -40,7 +40,9 @@ is the same layout unzipped, which is why every command accepts either.
 Each database is read straight from the archive into an in-memory connection via
 `sqlite3.deserialize` — nothing is extracted to a temp file.
 
-`Preset Class` distinguishes preset kinds: `6` = cabinet IR, `3` = effect module.
+`Preset Class` distinguishes preset kinds: `6` = cabinet IR, `3` = effect module. The other
+classes seen — `4`, `5`, `8`, `10`, `11` — follow from the pages a preset holds (see *Rig and
+preset packs*); their meaning is not established.
 
 Several `Rigs` columns are exposed raw, uninterpreted:
 
@@ -56,7 +58,17 @@ Older databases may lack these columns; they read as `None`.
 
 Amp metadata that matters lives in free-text columns — `Amp Comment` carries boost/drive
 notes (pedal names, "Unboosted"), so boost state is inferred from tokens rather than read
-from a flag, and is `None` when the text says nothing about drive.
+from a flag. A negation before a cue ("no TS9") reads as not boosted, and so does an off-word
+after it: right after its word ("Boost Off", "Klon bypassed"), after punctuation ("Boost:
+off", "TS9 (off)", "Boost: none") or after up to three linking words ("TS9 is turned off",
+"TS9 isn't on", "Boost not needed"). Cues named together — one pedal in two words ("Maxon 808
+off"), or pedals joined by and, &, + or / ("TS9 and Klon off") — are switched off together,
+but a field's value ends where the next field's label begins ("Drive: TS9 / Boost: none"
+keeps the TS9 on). A cue after a colon or an equals sign, or alone in brackets, decides the
+one before it ("Boost: TS9 off", "Boost (TS9) off"); an aside or a list does not ("Klon (TS9
+off)", "TS9 - Klon off"). "Off axis" and a knob in between ("OD Attack Off") switch nothing
+off. The state is `None` when the text says nothing about drive, or when a pedal is only
+toggled ("TS9 on/off") and none is on.
 
 ## Dated snapshots
 
@@ -80,9 +92,15 @@ How it differs from the library tree:
 
 - **No folders.** Rigs and presets are not filed, so they read with an empty folder. `diff`
   keys rigs and presets by folder and name, so against a `.rmbackup` or the live directory
-  they never align; performances, keyed by name, do.
+  they meet by path only the library's top-level rigs, never its presets (every library
+  preset reads with a folder) — `--by-name` matches them all; performances, keyed by name,
+  always do.
 - `Rigs` has no `Profile Type` or `Profile Revision` column (both read as `None`) and an
-  extra `KPAID` column; `Performances` has an extra `ProgNr`. Neither extra is read.
+  extra `KPAID` column, read raw as `kpaid`: a number unique within the snapshot, with gaps,
+  that a rig keeps across that device's snapshots. A number can later hold a different rig —
+  another name and another amp block — so it identifies a place on the device, not a rig
+  for good. `Performances` has an extra `ProgNr`, read raw as `prog_nr`: 1 to 125, one per
+  performance.
 - `ROMPresets` rows are all class `3`, identical from snapshot to snapshot until the set
   grows in a later one, and never overlap the user's presets. They are not read.
 - A snapshot can hold no rows at all.
@@ -101,7 +119,7 @@ bare SQLite database**, not a zip, with the same tables whichever they carry:
 |---|---|
 | `packs` | one row: `name`, `author` (the vendor), `copyright`, `releasedate` (`YYYYMMDDHHMMSS`), `minversion`, GUIDs, a signature |
 | `properties` | key/value pairs; `Content` is `Rigs` or `Presets` |
-| `rigs` | one row per rig — or per preset, in a preset pack: `name`, `author`, `createdate`, `comment`, `rig_id` |
+| `rigs` | one row per rig — or per preset, in a preset pack: `name`, `author`, `createdate`, `comment` (read as `instrument` for a rig; empty in the preset packs seen), `rig_id` |
 | `rigdata` | the payloads, joined on `rigs.rig_id = rigdata.id` |
 | `texts`, `images`, `packupdates` | description, artwork, update chain — not read |
 
@@ -117,11 +135,33 @@ one `KTrk` chunk, it is byte-identical to the blob Rig Manager stores for that r
 the stored blob exactly. So a pack rig reads, compares and extracts like a library rig.
 
 The `rigs` table has no amp, gain or cab columns, and its `comment` holds an instrument
-category (`Guitar`, `Bass`, …) rather than the rig comment. Those fields are read from the
+category (`Guitar`, `Bass`, `Acoustic`) rather than the rig comment; it reads as the rig's
+`instrument`. Those fields are read from the
 payload instead, through the strings the `Rigs` columns mirror (see *Strings* below), and the
 gain is the decoded amp gain rounded to the one decimal the `Gain` column stores. DI vs
 studio follows from the payload's cab name. Pack rigs have no folder, and no
 `Profile Type`, `Profile Revision` or `Cabinet Type`.
+
+A preset pack's rows carry no class, type or category. The class follows from the set of
+module pages the payload holds, counting function-`02` and function-`08` blocks alike, from
+any start parameter. Every
+library and snapshot preset checked has exactly the class this table gives, and no set of
+pages occurs with two classes:
+
+| Pages held | Preset Class |
+|---|---|
+| `0x0c` | `6` (cab IR) |
+| `0x32` | `3` (effect module) |
+| `0x0a` | `4` |
+| `0x0a`, `0x0b` | `4` |
+| `0x0b` | `5` |
+| `0x0a`, `0x0b`, `0x0c` | `8` |
+| `0x09` | `10` |
+| `0x7f` | `11` |
+
+Any other set reads as no class. The type is not decoded: an effect preset's `Preset Type`
+usually equals the `Stomps.xml` name of its type value, but not always (Rig Manager keeps an
+older name for at least one effect), so a pack preset's type and category stay empty.
 
 ## Rig and performance blobs
 

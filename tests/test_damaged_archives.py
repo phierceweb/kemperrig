@@ -8,6 +8,7 @@ import os
 import struct
 import tempfile
 import unittest
+import warnings
 import zipfile
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -125,6 +126,47 @@ class DamagedEntryTest(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertEqual(len(err.strip().splitlines()), 1, err)
             self.assertFalse(os.path.exists(out))
+
+
+class DuplicateEntryTest(unittest.TestCase):
+    """Rig Manager writes each database once: one held twice is refused, never read twice."""
+
+    def _twice(self, d: str, name: str = _DB) -> str:
+        """`sample_library` holding the entry `name` twice, the first copy empty."""
+        src, dst = sample_library(d, "src.rmbackup"), os.path.join(d, "twice.rmbackup")
+        with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w") as zout, \
+                warnings.catch_warnings():
+            warnings.simplefilter("ignore")   # zipfile warns about the duplicate it writes
+            zout.writestr(name, b"")
+            for info in zin.infolist():
+                zout.writestr(info.filename, zin.read(info))
+            if name not in zin.namelist():
+                zout.writestr(name, b"")
+        return dst
+
+    def test_every_reader_refuses_it_in_one_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._twice(d)
+            for argv in (["rigs", p], ["summary", p], ["doctor", p]):
+                with self.subTest(command=argv[0]):
+                    code, _, err = _run(argv)
+                    self.assertEqual(code, 1)
+                    self.assertEqual(len(err.strip().splitlines()), 1, err)
+                    self.assertIn("appears twice", err)
+
+    def test_rename_refuses_it_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            p, out = self._twice(d), os.path.join(d, "out.rmbackup")
+            code, _, err = _run(["rename", p, "A", "B", "-o", out])
+            self.assertEqual(code, 2)
+            self.assertIn("appears twice", err)
+            self.assertFalse(os.path.exists(out))
+
+    def test_a_repeated_entry_that_is_no_database_reads_as_before(self):
+        with tempfile.TemporaryDirectory() as d:
+            code, out, err = _run(["rigs", self._twice(d, "notes.txt"), "--json"])
+            self.assertEqual((code, err), (0, ""))
+            self.assertEqual(len(json.loads(out)["rigs"]), 1)
 
 
 class NamedFailureTest(unittest.TestCase):

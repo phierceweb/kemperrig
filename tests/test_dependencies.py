@@ -1,4 +1,4 @@
-"""The package stays dependency-light: stdlib plus one pf_core helper, nothing else.
+"""The package stays dependency-light: stdlib plus one pw_foundation helper, nothing else.
 
 The README promises a stdlib-only core; this is what keeps that true. A new third-party
 import has to be a deliberate choice made here, not something that arrives with a patch.
@@ -10,7 +10,7 @@ import sys
 import unittest
 
 _SRC = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "kemperrig"))
-_ALLOWED_THIRD_PARTY = {"pf_core"}
+_ALLOWED_THIRD_PARTY = {"pw_foundation"}
 
 
 def _py_files() -> list[str]:
@@ -45,10 +45,10 @@ class DependencyBoundaryTest(unittest.TestCase):
                 offenders.append(f"{os.path.relpath(path, _SRC)} -> {mod}")
         self.assertEqual(sorted(offenders), [], "undeclared third-party import")
 
-    def test_pf_core_surface_stays_small(self):
+    def test_pw_foundation_surface_stays_small(self):
         """Two symbols, and each only where it belongs.
 
-        Pinning the symbols alone let a pf_core import land in any core module and still pass,
+        Pinning the symbols alone let a pw_foundation import land in any core module and still pass,
         so the module is pinned too: the CLI boundary and the three writers, nowhere else.
         """
         used = set()
@@ -58,14 +58,14 @@ class DependencyBoundaryTest(unittest.TestCase):
             where = os.path.relpath(path, _SRC).replace(os.sep, "/")
             for node in ast.walk(tree):
                 if (isinstance(node, ast.ImportFrom) and node.module
-                        and node.module.startswith("pf_core")):
+                        and node.module.startswith("pw_foundation")):
                     used.update(f"{where}: {node.module}.{a.name}" for a in node.names)
         self.assertEqual(used, {
-            "services/edit.py: pf_core.utils.io.atomic_write_bytes",   # the three writers
-            "services/extract.py: pf_core.utils.io.atomic_write_bytes",
-            "services/census.py: pf_core.utils.io.atomic_write_bytes",
-            "cli/__init__.py: pf_core.utils.env.resolve_str",          # CLI boundary only
-            "cli/_curation.py: pf_core.utils.env.resolve_str",
+            "services/edit.py: pw_foundation.utils.io.atomic_write_bytes",   # the three writers
+            "services/extract.py: pw_foundation.utils.io.atomic_write_bytes",
+            "services/census.py: pw_foundation.utils.io.atomic_write_bytes",
+            "cli/__init__.py: pw_foundation.utils.env.resolve_str",          # CLI boundary only
+            "cli/_curation.py: pw_foundation.utils.env.resolve_str",
         })
 
 

@@ -41,5 +41,9 @@ def doctor_doc(c: Checkup) -> dict:
                                 for g in c.gain_mismatches],
             "name_mismatches": [_renamed(m) for m in c.name_mismatches],
             "unused_cab_irs": [{"folder": p.folder, "name": p.name} for p in c.unused_cab_irs],
+            "shared_cab_names": [{"name": s.name,
+                                  "presets": [{"folder": p.folder, "name": p.name,
+                                               "digest": digest(p.blob)} for p in s.presets]}
+                                 for s in c.shared_cab_names],
         },
     }

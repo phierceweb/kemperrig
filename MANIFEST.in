@@ -12,5 +12,5 @@ prune .claude
 prune .cursor
 prune .github
 
-# docs/pf-core is a gitignored symlink into site-packages; recursive-include follows it
-prune docs/pf-core
+# docs/pw-foundation is a gitignored symlink into site-packages; recursive-include follows it
+prune docs/pw-foundation

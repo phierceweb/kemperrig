@@ -70,6 +70,23 @@ def f08_pages(messages: list[Message]) -> set[int]:
             and m.payload[8] == 0}
 
 
+# Rig Manager's Preset Class by the set of module pages a preset holds, in either framing and
+# from any start: every set seen, each with one class only (docs/format.md).
+_PRESET_CLASSES = {
+    frozenset({0x0c}): "6", frozenset({0x32}): "3", frozenset({0x7f}): "11",
+    frozenset({0x0a, 0x0b, 0x0c}): "8", frozenset({0x0a}): "4", frozenset({0x0a, 0x0b}): "4",
+    frozenset({0x09}): "10", frozenset({0x0b}): "5",
+}
+
+
+def preset_class(messages: list[Message]) -> str | None:
+    """The Preset Class Rig Manager files a preset under, from the module pages its payload
+    holds; None for a set of pages never seen with one."""
+    f08 = {m.payload[7] for m in messages
+           if m.is_kemper and len(m.payload) >= 9 and m.payload[3:7] == _F08_HEADER}
+    return _PRESET_CLASSES.get(frozenset({page for page, _ in blocks(messages)} | f08))
+
+
 def _undecoded(slot: str) -> Effect:
     return Effect(slot=slot, type_value=None, type_name=None, on=None, decoded=False)
 

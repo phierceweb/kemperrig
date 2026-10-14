@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import sqlite3
 
-from kemperrig import _sysex
+from kemperrig import _sysex, _sysex_effects
 from kemperrig._tables import _text
 from kemperrig.records import Pack, Preset, Rig
 
 _PACK_TABLES = ("packs", "rigs", "rigdata")
+# Fields no pack row carries. A preset's class is decoded from its payload, which a diff
+# compares by digest anyway, so it is left out of field comparisons too.
+ABSENT = frozenset({"profile_type", "profile_revision", "cabinet_type", "kpaid",
+                    "preset_class", "preset_type", "preset_category"})
 _CONTENT = {"Rigs": "rigs", "Presets": "presets"}
 # Rig field ← the payload string at address `00 00 <n>`.
 _STRING_FIELDS = {
@@ -44,12 +48,14 @@ def _read(con: sqlite3.Connection, name: str) -> Pack:
     if len(packs) != 1:
         raise ValueError(f"{name}: {len(packs)} packs in one file — expected one")
     content = _content(con, name)
-    rows = con.execute("SELECT r.name, r.author, r.createdate, d.rig FROM rigs r "
+    have = {row[1] for row in con.execute('PRAGMA table_info("rigs")')}
+    comment = "r.comment" if "comment" in have else "NULL"
+    rows = con.execute(f"SELECT r.name, r.author, r.createdate, {comment}, d.rig FROM rigs r "
                        "LEFT JOIN rigdata d ON d.id = r.rig_id ORDER BY r.id").fetchall()
     pack_name, author, copyright_, released = (_text(v) for v in packs[0])
-    rows = [(*(_text(v) for v in row[:3]), row[3]) for row in rows]
+    rows = [(*(_text(v) for v in row[:4]), row[4]) for row in rows]
     rigs = [_rig(*row) for row in rows] if content == "rigs" else []
-    presets = ([Preset(name=r[0] or "", folder="", blob=_payload(r[3])) for r in rows]
+    presets = ([_preset(r[0], _payload(r[4])) for r in rows]
                if content == "presets" else [])
     return Pack(name=pack_name, author=author, copyright=copyright_, released=released,
                 content=content, rigs=rigs, presets=presets)
@@ -69,14 +75,23 @@ def _payload(track: bytes | None) -> bytes:
     return _sysex.krig(track) if isinstance(track, bytes) and track else b""
 
 
-def _rig(name: str | None, author: str | None, date: str | None, track: bytes | None) -> Rig:
+def _preset(name: str | None, blob: bytes) -> Preset:
+    messages = _sysex.parse_messages(blob)
+    return Preset(name=name or "", folder="", blob=blob,
+                  preset_class=_sysex_effects.preset_class(messages) if messages else None)
+
+
+def _rig(name: str | None, author: str | None, date: str | None, instrument: str | None,
+         track: bytes | None) -> Rig:
     blob = _payload(track)
+    instrument = instrument or None
     try:
         messages = _sysex.iter_messages(blob)
     except ValueError:   # kept with its payload so doctor reports it and the rest still reads
-        return Rig(name=name or "", folder="", author=author, date=date, blob=blob)
+        return Rig(name=name or "", folder="", author=author, date=date, instrument=instrument,
+                   blob=blob)
     strings = _sysex.addressed_strings(messages)
     fields = {f: strings.get(bytes([0, 0, n])) or None for f, n in _STRING_FIELDS.items()}
     gain = _sysex.amp_gain(messages)
-    return Rig(name=name or "", folder="", author=author, date=date,
+    return Rig(name=name or "", folder="", author=author, date=date, instrument=instrument,
                gain=None if gain is None else round(gain, 1), blob=blob, **fields)

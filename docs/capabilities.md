@@ -34,7 +34,8 @@ commands in a condensed form.
 | a rig pack, a preset pack | `Rig Packs/*.rigpack`, `Preset Packs/*.presetpack` |
 
 Every read command takes any of them. Snapshots and packs have no folders, so their rigs
-are known by name alone. Databases are read into memory from the file's bytes: nothing is
+are known by name alone, and `--folder` on one is an error rather than an empty result — as
+it is on a library whose rigs all sit at its top level. Databases are read into memory from the file's bytes: nothing is
 extracted to disk and nothing is written beside a live library.
 
 ## Browse and filter
@@ -48,7 +49,8 @@ extracted to disk and nothing is written beside a live library.
   many effects stay locked across the slots in use.
 
 Boost is read from the free-text `Amp Comment` (pedal names, "unboosted", "no boost");
-when the text says nothing about drive, the rig is neither boosted nor unboosted.
+when the text says nothing about drive, or toggles a pedal ("TS9 on/off") and switches none
+on, the rig is neither boosted nor unboosted.
 
 ## Decode one rig
 
@@ -93,7 +95,8 @@ A filter never silently drops a rig it cannot judge. It lists, after the results
 - **duplicates** — byte-identical profiles, byte-identical amp blocks with other effects,
   and rigs that merely share author, amp, gain and boost (a prompt to listen, not
   evidence);
-- **effect categories** in use, and **cab IRs** in use;
+- **effect categories** in use, and **cab IRs** in use; module slots present only in the
+  function-08 framing are counted per slot on their own, since their type is not decoded;
 - **performances whose gain ladder is out of order**;
 - **payloads that do not parse**, skipped and listed.
 
@@ -117,9 +120,13 @@ A performance slot holds its own copy of the rig it was built from, under that r
 | amp gain differs | informational | A rig's decoded amp gain and its stored `Gain` differ by more than the column's rounding. |
 | name differs | informational | The name in the library differs from the one inside the payload, which is what the Profiler shows. |
 | unused cab IR | informational | A cab-IR preset no rig or slot loads. |
+| cab IRs sharing a name | informational | Cab-IR presets with different payloads that carry one cab name: a rig or slot loading that name could mean any of them, so none of them is reported unused on its account. |
 
 `--strict` exits 1 on a definite finding only. `--device-backup` takes any source holding
 what is on your Profiler.
+
+A source holding no rigs at all, such as a snapshot taken before any were added, reports
+every slot dangling; the text view says so under the dangling slots.
 
 A payload that does not parse stops only a command about that one rig (`rig`, `pages RIG`),
 and the error names it. `analyze` and `pages --all` skip and list it, `performances` shows
@@ -129,8 +136,8 @@ it.
 ## Packs
 
 `pack PACKFILE` lists a pack's name, vendor and release date and each rig's amp, gain and
-DI/studio — or each preset. A pack has no amp or gain columns, so those are read from each
-rig's payload. With `--against LIBRARY`, every item gets a standing:
+DI/studio, tagged with the instrument the pack files it under (`Guitar`, `Bass`, …) — or
+each preset, with its class (cab IR, effect, …) decoded from its payload. A pack has no amp or gain columns, so those are read from each rig's payload. With `--against LIBRARY`, every item gets a standing:
 
 | Standing | Meaning |
 |---|---|
@@ -147,6 +154,12 @@ any read command, of `diff` and of `extract`.
 two sources, field by field, with payloads compared by digest. A performance slot pointed at
 another rig shows as `slot N`; same-named records are paired by payload, then by fields.
 It exits 1 when the sources differ, so it can gate a script.
+
+A snapshot or a pack has no folders, so by path its rigs meet only the rigs at a library's
+top level, and its presets none of a library's (every one reads with a folder).
+`diff --by-name` matches them by name alone; a column one side does not carry at all (a
+snapshot has no `Profile Type`) is named as not compared instead of showing as a change on
+every rig.
 
 `history` reads Rig Manager's dated snapshots — or any snapshots and `.rmbackup` files — one
 at a time and prints, for each, its counts and what was added (`+`), removed (`-`) or

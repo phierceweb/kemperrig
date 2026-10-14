@@ -55,7 +55,7 @@ class RenamePayloadTest(unittest.TestCase):
         self.assertEqual(_payload_names(rig.blob), ["New"])
         self.assertEqual(_payload_names(after.performances[0].blob),
                          [None, "New", "Other", "New", None, None])
-        self.assertEqual(doctor.name_mismatches(after), [])
+        self.assertEqual(doctor.name_mismatches(doctor.parse(after)), [])
 
     def test_renaming_back_restores_every_payload_byte(self):
         back = os.path.join(self.d, "c.rmbackup")

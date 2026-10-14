@@ -37,9 +37,10 @@ samples/
 *.orig
 *.rej
 
-# AI / agent workspace — AGENTS.md, CLAUDE.md, .ai/rules and .ai/skills (and the
-# .claude/.cursor links to them) are tracked; everything else is local
-.ai/plans/
+# AI / agent workspace — AGENTS.md, CLAUDE.md, .ai/rules, .ai/skills, the .claude/.cursor
+# links and the .ai/plans/.gitkeep those links resolve to are tracked; everything else is local
+.ai/plans/*
+!.ai/plans/.gitkeep
 .ai/scripts/
 .ai/docs/
 .claude/settings.local.json
@@ -49,5 +50,5 @@ samples/
 .cbmignore
 CLAUDE.local.md
 
-# pf-core docs symlink (bin/run setup recreates it)
-docs/pf-core
+# pw-foundation docs symlink (bin/run setup recreates it)
+docs/pw-foundation

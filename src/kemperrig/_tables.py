@@ -33,10 +33,12 @@ _RIG_TEXT = {
     "speaker_manufacturer": "Speaker Manufacturer", "speaker_model": "Speaker Model",
     "profile_type": "Profile Type", "profile_revision": "Profile Revision",
     "cabinet_type": "Cabinet Type", "cabinet_configuration": "Cabinet Configuration",
+    "kpaid": "KPAID",
 }
-# Rigs columns an older Rig Manager may not write; absent, they read as None.
+# Rigs columns an older Rig Manager may not write, or only a snapshot writes; absent, they
+# read as None.
 _OPTIONAL_RIG_COLUMNS = ("Profile Type", "Profile Revision", "Cabinet Type",
-                         "Cabinet Configuration")
+                         "Cabinet Configuration", "KPAID")
 _SQLITE_MAGIC = b"SQLite format 3\x00"
 # A dated snapshot is one bare db; its ROMPresets table is factory content and is not read.
 _SNAPSHOT_TABLES = ("Rigs", "Performances", "Presets")
@@ -57,9 +59,12 @@ def _to_float(text: str | None) -> float | None:
     return value if math.isfinite(value) else None
 
 
-def _text(value: object) -> object:
-    """A text column's value; a BLOB, which a TEXT column keeps as bytes, reads as NULL."""
-    return None if isinstance(value, bytes) else value
+def _text(value: object) -> str | None:
+    """A text column's value: a BLOB, which a TEXT column keeps as bytes, reads as NULL, and a
+    number, which an untyped column keeps as one, as its text."""
+    if value is None or isinstance(value, str):
+        return value
+    return None if isinstance(value, bytes) else str(value)
 
 
 def _payload(value: object) -> bytes:
@@ -71,6 +76,7 @@ def _load_db(blob: bytes, name: str) -> sqlite3.Connection:
     con = sqlite3.connect(":memory:")
     try:
         con.deserialize(blob)
+        con.setconfig(sqlite3.SQLITE_DBCONFIG_DEFENSIVE, True)
     except (MemoryError, sqlite3.Error) as e:  # a 0-byte db raises MemoryError, not DatabaseError
         con.close()
         raise ValueError(f"unreadable {name} ({len(blob)} bytes): {e}")
@@ -119,8 +125,19 @@ def _read(blob: bytes, name: str, rows: Callable[[sqlite3.Connection], _T]) -> _
         con.close()
 
 
-def _read_rigs(blob: bytes, folder: str, name: str) -> list[Rig]:
-    return _read(blob, name, lambda con: _rigs(con, folder))
+def _read_rigs(blob: bytes, folder: str, name: str
+               ) -> tuple[list[Rig], frozenset[str] | None]:
+    """The rigs in `blob`, and the fields whose optional column it lacks (None with no Rigs
+    table, so it has no say in what the library carries)."""
+    return _read(blob, name, lambda con: (_rigs(con, folder), _absent(con)))
+
+
+def _absent(con: sqlite3.Connection) -> frozenset[str] | None:
+    if not _has_table(con, "Rigs"):
+        return None
+    have = {row[1] for row in con.execute('PRAGMA table_info("Rigs")')}
+    return frozenset(f for f, c in _RIG_TEXT.items()
+                     if c in _OPTIONAL_RIG_COLUMNS and c not in have)
 
 
 def _rigs(con: sqlite3.Connection, folder: str) -> list[Rig]:
@@ -150,8 +167,10 @@ def _performances(con: sqlite3.Connection) -> list[Performance]:
         for n in range(1, _PERF_SLOTS + 1)
         for k in ("Name", "Enable", "RigName", "AmpName", "CabName")
     )
+    have = {row[1] for row in con.execute('PRAGMA table_info("Performances")')}
+    prog = 'p."ProgNr"' if "ProgNr" in have else 'NULL AS "ProgNr"'
     rows = con.execute(
-        f'SELECT p.Filename, p."Name", p."Tempo", {cols}, b.data AS _blob '
+        f'SELECT p.Filename, p."Name", p."Tempo", {prog}, {cols}, b.data AS _blob '
         'FROM Performances p LEFT JOIN Performances_blobs b ON p.id = b.id'
     ).fetchall()
     out = []
@@ -168,7 +187,7 @@ def _performances(con: sqlite3.Connection) -> list[Performance]:
             ))
         out.append(Performance(
             name=_text(r["Name"]) or "", filename=_text(r["Filename"]), tempo=_text(r["Tempo"]),
-            slots=slots,
+            prog_nr=_text(r["ProgNr"]), slots=slots,
             blob=_payload(r["_blob"]),
         ))
     return out
@@ -221,14 +240,15 @@ def _presets(con: sqlite3.Connection, folder: str) -> list[Preset]:
     ]
 
 
-def _snapshot(con: sqlite3.Connection,
-              name: str) -> tuple[list[Rig], list[Performance], list[Preset]]:
-    """Rigs, performances and presets from one snapshot db. Nothing in it has a folder."""
+def _snapshot(con: sqlite3.Connection, name: str
+              ) -> tuple[list[Rig], list[Performance], list[Preset], frozenset[str]]:
+    """Rigs, performances and presets from one snapshot db, and the rig fields it has no
+    column for. Nothing in it has a folder."""
     try:
         missing = [t for t in _SNAPSHOT_TABLES if not _has_table(con, t)]
         if missing:
             raise ValueError(f"{name}: no {' or '.join(missing)} table — not a Rig Manager "
                              "snapshot or pack")
-        return _rigs(con, ""), _performances(con), _presets(con, "")
+        return _rigs(con, ""), _performances(con), _presets(con, ""), _absent(con) or frozenset()
     except sqlite3.DatabaseError as e:   # a truncated db deserializes, then fails on read
         raise ValueError(f"{name}: unreadable snapshot: {e}") from e

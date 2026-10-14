@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kemperrig"
-version = "0.1.0"
+version = "0.2.0"
 description = "Reader for Kemper Profiler Rig Manager backups (.rmbackup) and the live Rig Manager library — rigs, performances, presets, and the SysEx inside them"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio",
     "Typing :: Typed",
 ]
-dependencies = ["pf-core~=0.25.0"]
+dependencies = ["pw-foundation~=1.0"]
 
 [project.urls]
 Repository = "https://github.com/phierceweb/kemperrig"

@@ -20,12 +20,12 @@ _CENSUS_COMMENT = (
 def _rounded(value: float | None) -> float | None:
     return None if value is None else round(value, 4)
 
-def census_doc(c: Census) -> dict:
+def census_doc(c: Census, *, comment: str | None = None) -> dict:
     """The census as written: `summary`'s totals and gain block, then the decode anchors."""
     s = summary_doc(c.report, info_user=c.user)
     k = c.checkup
     return {
-        "_comment": _CENSUS_COMMENT, "census": CENSUS_FORMAT, "user": s["user"],
+        "_comment": comment or _CENSUS_COMMENT, "census": CENSUS_FORMAT, "user": s["user"],
         "totals": {"rigs": s["rigs"], "di": s["di"], "studio": s["studio"],
                    "performances": s["performances"], "slots": k.slots,
                    "presets": c.presets, "cab_irs": k.cab_irs,
@@ -56,7 +56,7 @@ def census_doc(c: Census) -> dict:
             "cab_ir": c.performance.cab_ir, "gain_ladder": c.performance.gain_ladder},
     }
 
-def census_text(c: Census) -> str:
+def census_text(c: Census, *, comment: str | None = None) -> str:
     """`census_doc` as the census file holds it: sorted keys, so two runs diff cleanly."""
-    return json.dumps(census_doc(c), indent=2, sort_keys=True, ensure_ascii=False,
+    return json.dumps(census_doc(c, comment=comment), indent=2, sort_keys=True, ensure_ascii=False,
                       allow_nan=False) + "\n"

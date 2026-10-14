@@ -12,7 +12,8 @@ from pathlib import Path
 from _fixture import sample_library
 from _payloads import make_blob, rig_track
 
-from kemperrig.model import Rig, library_root
+from kemperrig._guard import library_root
+from kemperrig.model import Rig
 from kemperrig.services.extract import file_name, plan, refusal, write
 
 

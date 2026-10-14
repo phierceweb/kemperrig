@@ -16,6 +16,7 @@ def analyze_doc(a: Analysis) -> dict:
         "identical_profiles": [[r.path for r in g] for g in a.identical_profiles],
         "drive": a.drive,
         "effect_categories": [{"category": c, "slots": n} for c, n in a.effect_categories],
+        "effects_undecoded": [{"slot": s, "rigs": n} for s, n in a.effects_undecoded],
         "ir_inventory": [{"name": n, "count": c} for n, c in a.ir_inventory],
         "non_monotonic_performances": [{"name": p.name, "gain_ladder": ladder}
                                        for p, ladder in a.misordered],

@@ -20,7 +20,7 @@ or from a clone of the repository.
 ## Requirements
 
 - **Python 3.12 or newer.**
-- **One dependency**, [pf-core](https://pypi.org/project/pf-core/), installed automatically;
+- **One dependency**, [pw-foundation](https://pypi.org/project/pw-foundation/), installed automatically;
   everything else is the standard library.
 - **A Rig Manager library to read** — a `.rmbackup` file, or Rig Manager's own library
   directory. Rig Manager itself is optional: it only supplies effect names (see

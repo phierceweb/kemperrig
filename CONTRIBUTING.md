@@ -8,7 +8,7 @@ kemperrig only reads. `.rmbackup` archives are the only copy of a profile librar
 have, so nothing here modifies a source file. The three writers build new files — `rename` a
 new archive, `extract` standalone `.krig` files, `summary --write-golden` a JSON census —
 outside the source and any Rig Manager library, each behind a guard that starts from
-`model.write_refusal`. A change that writes in place will not be merged.
+`_guard.write_refusal`. A change that writes in place will not be merged.
 
 ## Setting up
 
@@ -16,7 +16,7 @@ outside the source and any Rig Manager library, each behind a guard that starts 
 git clone https://github.com/phierceweb/kemperrig && cd kemperrig
 bin/run setup               # venv + editable install with the dev tools
 bin/run pytest              # the suite
-bin/run lint                # ruff + the pf-core file-size gate
+bin/run lint                # ruff + the pw-foundation file-size gate
 .venv/bin/pre-commit install   # optional: run ruff and the gate on every commit
 ```
 
@@ -61,7 +61,7 @@ profiles, and an issue is public.
 - **Verify against a real file.** A decoding claim needs evidence: a value Rig Manager
   displays, or a Profiler that agrees. A plausible-looking offset is not a finding; an
   unverified value decodes to `None`.
-- **Keep the core dependency-light.** The standard library plus two pf-core helpers,
+- **Keep the core dependency-light.** The standard library plus two pw-foundation helpers,
   enforced by `tests/test_dependencies.py`. A new dependency needs a reason.
 - **Fixtures stay synthetic.** Never commit a real `.rmbackup` or pack, and never commit
   identifying details from one — rig names, author handles, library counts.

@@ -7,7 +7,7 @@ import sys
 
 from .. import _json, _views
 from ..model import Backup, snapshot_dir
-from ..services.diff import diff_performances, diff_presets, diff_rigs
+from ..services.diff import diff_performances, diff_presets, diff_rigs, folders_on_one_side
 from ..services.history import ORDERS, history
 
 
@@ -17,11 +17,14 @@ def cmd_diff(args) -> int:
         print("kemperrig: a backup path is blank", file=sys.stderr)
         return 2
     before, after = Backup.open(args.before), Backup.open(args.after)
-    rigs = diff_rigs(before, after)
+    rigs = diff_rigs(before, after, by_name=args.by_name)
     perfs = diff_performances(before, after)
-    presets = diff_presets(before, after)
+    presets = diff_presets(before, after, by_name=args.by_name)
+    if not args.by_name and folders_on_one_side(before, after):
+        print("kemperrig: one source files no rig or preset in a folder, so the other's filed "
+              "ones never match it by path — --by-name matches them by name", file=sys.stderr)
     if args.json:
-        _json.dump(_json.diff_doc(rigs, perfs, presets))
+        _json.dump(_json.diff_doc(rigs, perfs, presets, by_name=args.by_name))
     else:
         print(_views.render_diff(rigs, perfs, presets))
     return 0 if (rigs.empty and perfs.empty and presets.empty) else 1
@@ -31,6 +34,9 @@ def register_diff(sub) -> None:
     df = sub.add_parser("diff", help="what changed between two backups")
     df.add_argument("before")
     df.add_argument("after")
+    df.add_argument("--by-name", action="store_true",
+                    help="match rigs and presets by name alone, ignoring folders — for a "
+                         "snapshot or pack against a library")
     df.add_argument("--json", action="store_true", help="machine-readable output")
     df.set_defaults(func=cmd_diff)
 

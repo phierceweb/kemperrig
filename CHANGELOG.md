@@ -2,6 +2,54 @@
 
 Notable changes to kemperrig, newest first.
 
+## v0.2.0 — 2026-10-18
+
+### Commands
+
+- `analyze` counts module slots present only in the function-08 framing, per slot, and
+  `--json` lists them as `effects_undecoded`.
+- On a source where no rig is in a folder — a snapshot, a pack, or a library with every rig
+  at its top level — `--folder` (`rigs`, `extract`, `rig`, `pages`) is an error instead of
+  selecting nothing.
+- `--boosted` / `--unboosted` and `is_boosted` read a boost cue switched off after it as not
+  boosted: right after ("TS9 off", "Klon bypassed"), after punctuation or linking words
+  ("Boost: off", "TS9 (off)", "TS9 is turned off", "TS9 isn't on"), or after pedals named
+  together ("TS9 and Klon off"). A pedal only toggled ("TS9 on/off"), with none switched on,
+  leaves `is_boosted` `None`.
+- `doctor` lists cab-IR presets with different payloads that share a cab name, and says
+  when a source holds no rigs.
+- `diff --by-name` matches rigs and presets by name, so a snapshot or a pack lines up with a
+  library; without it, `diff` says on stderr when one source files rigs or presets in folders
+  and the other files none. `diff` and `history` compare `profile_revision`, `cabinet_type`
+  and `cabinet_configuration`, and leave a column one source has no column for uncompared
+  (`diff` names it) instead of reporting every record changed.
+
+### Reading
+
+- A rig pack's instrument category (`Guitar`, `Bass`, `Acoustic`) reads as the rig's
+  `instrument`; `pack` shows it.
+- A snapshot's `KPAID` and `ProgNr` columns read raw, as a rig's `kpaid` and a performance's
+  `prog_nr`.
+- A preset pack's presets get their `preset_class` from the module pages their payload
+  holds, so `presets` and `pack` tell their cab IRs and effects apart.
+- Every database — read, or rewritten by `rename` — is opened in SQLite's defensive mode, so
+  a crafted one cannot rewrite its own schema or shadow tables.
+- An archive that holds one database twice is refused as damaged instead of read twice.
+- A number in an untyped text column reads as its text instead of breaking `rigs` and
+  `analyze`.
+
+### Writers — none modifies its source
+
+- `summary --write-golden --force` keeps the `_comment` of the census it replaces.
+- `rename` runs none of a database's triggers and overrides any conflict clause or collation
+  its schema declares, so it changes no row but the renamed rig's and the slots re-pointed at
+  it.
+
+### Development
+
+- Requires pw-foundation 1.0. The file-size gate reads `.pw-guards.toml`; `bin/run setup`
+  wires the docs link and starter rules through `pw-setup`.
+
 ## v0.1.0 — 2026-10-04
 
 First public release. Apache-2.0; published to PyPI.

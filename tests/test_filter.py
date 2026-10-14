@@ -7,7 +7,8 @@ import unittest
 from _fixture import build_rmbackup
 
 from kemperrig import Backup
-from kemperrig.services.filter import filter_rigs
+from kemperrig.records import Rig
+from kemperrig.services.filter import filter_rigs, find_rig
 
 
 class FilterTest(unittest.TestCase):
@@ -84,6 +85,38 @@ class FilterTest(unittest.TestCase):
         self.assertEqual({r.name for r in filter_rigs(rigs, channel="clean")}, {"m2"})
         self.assertEqual({r.name for r in filter_rigs(rigs, boosted=True)}, {"m1"})
         self.assertEqual({r.name for r in filter_rigs(rigs, boosted=False)}, {"m2"})
+
+
+class FolderlessSourceTest(unittest.TestCase):
+    RIGS = [Rig(name="A", folder=""), Rig(name="B", folder="")]
+
+    def test_folder_on_a_source_with_no_folders_is_an_error(self):
+        with self.assertRaisesRegex(ValueError, r"^--folder 'Amps': no rig here is filed"):
+            filter_rigs(self.RIGS, folder="Amps")
+
+    def test_find_rig_says_the_same(self):
+        with self.assertRaisesRegex(ValueError, r"^--folder 'Amps': no rig here is filed"):
+            find_rig(self.RIGS, "A", folder="Amps")
+
+    def test_only_an_empty_folder_is_no_filter(self):
+        self.assertEqual(len(filter_rigs(self.RIGS, folder="")), 2)
+        with self.assertRaisesRegex(ValueError, r"^--folder '  ': no rig here is filed"):
+            filter_rigs(self.RIGS, folder="  ")
+
+    def test_a_library_with_rigs_only_at_its_top_level_says_so_plainly(self):
+        with tempfile.TemporaryDirectory() as d:
+            rigs = Backup.open(build_rmbackup(os.path.join(d, "top.rmbackup"),
+                                              rigs=[{"name": "A", "folder": ""}])).rigs
+            with self.assertRaises(ValueError) as cm:
+                filter_rigs(rigs, folder="Amps")
+            self.assertEqual(str(cm.exception), "--folder 'Amps': no rig here is filed in a "
+                             "folder, so it can match none — drop --folder")
+
+    def test_a_library_with_folders_just_matches_none(self):
+        self.assertEqual(filter_rigs([Rig(name="A", folder="Amps")], folder="Cabs"), [])
+
+    def test_no_rigs_is_not_an_error(self):
+        self.assertEqual(filter_rigs([], folder="Amps"), [])
 
 
 if __name__ == "__main__":

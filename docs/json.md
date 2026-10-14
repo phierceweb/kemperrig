@@ -61,6 +61,8 @@ flags, and its digest.
 | `amp_location` | `Amp Location` |
 | `amp_model_year` | `Amp Model Year` |
 | `amp_pickup` | `Amp Pickup` |
+| `instrument` | in a rig pack, the pack's instrument category (`Guitar`, `Bass`, `Acoustic`); `null` elsewhere |
+| `kpaid` | in a snapshot, the `KPAID` column, raw: a number unique within the snapshot that a rig keeps across that device's snapshots, though a later rig can take it over; `null` elsewhere |
 | `source_amp` | `Source Amp`, the maker |
 | `cabinet_name` | `Cabinet Name` — `N/A`, empty or `DIRECT` on a DI profile |
 | `cabinet_type` | `Cabinet Type`, raw — not a DI flag |
@@ -72,7 +74,7 @@ flags, and its digest.
 | `profile_type` | `Profile Type`, raw; `null` where the source has no such column |
 | `profile_revision` | `Profile Revision`, raw |
 | `is_di` | `true` for a DI profile (no baked-in cab) |
-| `is_boosted` | `true`/`false` from the `Amp Comment` text; `null` when it says nothing about drive |
+| `is_boosted` | `true`/`false` from the `Amp Comment` text; `null` when it says nothing about drive, or toggles a pedal (`TS9 on/off`) and switches none on |
 | `digest` | the payload digest; `null` for an empty payload |
 | `decode` | only from `rig` and `rigs --decode`: a [decode object](#decode-object), or `null` when the payload does not parse |
 
@@ -115,7 +117,7 @@ could not judge, by path. Both keys are always there.
 | `name` | the preset's name |
 | `folder` | its library folder |
 | `filename` | the stored file name |
-| `preset_class` | `Preset Class`: `6` is a cab IR, `3` an effect module |
+| `preset_class` | `Preset Class`: `6` is a cab IR, `3` an effect module; in a preset pack, decoded from the pages the payload holds, or `null` |
 | `preset_category` | `Preset Category` |
 | `preset_type` | `Preset Type` |
 | `is_cab_ir` | `true` for a cab-IR preset |
@@ -126,6 +128,7 @@ could not judge, by path. Both keys are always there.
 |---|---|
 | `name` | the performance's name |
 | `tempo` | the `Tempo` column, raw |
+| `prog_nr` | in a snapshot, the `ProgNr` column, raw: 1–125, one per performance; `null` elsewhere |
 | `slots` | five slots, each `index`, `name`, `enable`, `rig_name`, `amp_name`, `cab_name` |
 | `gain_ladder` | each slot's gain, read from the rig it names; `null` where that rig is missing or ambiguous |
 | `locked_ratio` | the share of effect slots identical across the slots in use; `null` when fewer than two can be compared |
@@ -209,6 +212,7 @@ one-line error and exit 1 instead.
 | `identical_profiles` | groups of rig paths with byte-identical payloads |
 | `drive` | `boosted`, `unboosted`, `unknown` counts |
 | `effect_categories` | `{category, slots}`, most-used first; empty without Rig Manager's table |
+| `effects_undecoded` | `{slot, rigs}` per module slot present only in the function-08 framing, most first — counted with or without Rig Manager's table, never in `effect_categories` |
 | `ir_inventory` | `{name, count}` per cab-IR file in use |
 | `non_monotonic_performances` | `{name, gain_ladder}` for performances whose slots do not climb in gain |
 | `unparsed` | `rigs` (paths) and `performances` (names) whose payload does not parse |
@@ -223,7 +227,7 @@ one-line error and exit 1 instead.
 | `slots` | how many performance slots |
 | `cab_irs` | how many cab-IR presets |
 | `definite` | `dangling_slots` and `ambiguous_slots` (each `performance`, `slot`, `rig_name`; ambiguous ones add the competing `rigs`), and `broken_payloads` (`kind`, `name`, `folder`, `problem`) |
-| `informational` | `device_only_slots` (`null` without `--device-backup`), `unread_payloads`, `gain_mismatches`, `name_mismatches`, `unused_cab_irs` |
+| `informational` | `device_only_slots` (`null` without `--device-backup`), `unread_payloads`, `gain_mismatches`, `name_mismatches`, `unused_cab_irs`, `shared_cab_names` (`name`, and its `presets`, each `folder`, `name`, `digest`) |
 
 ### pack
 
@@ -241,9 +245,11 @@ one-line error and exit 1 instead.
 | Key | Holds |
 |---|---|
 | `identical` | `true` when nothing differs — the case that exits 0 |
-| `rigs` | `added`, `removed` (keys) and `changed` (`{key, changes: [{field, before, after}]}`) |
+| `matched_by` | `path` (folder and name), or `name` with `--by-name` |
+| `uncompared` | per kind (`rigs`, `performances`, `presets`), the fields left uncompared because one source has no column for them — a snapshot has no `Profile Type`, a pack no `Preset Class`, an older Rig Manager library no `Cabinet Type`; empty when either side holds none of that kind |
+| `rigs` | `added`, `removed` (keys) and `changed` (`{key, changes: [{field, before, after}]}`); keyed by path, or by name with `--by-name` |
 | `performances` | the same, keyed by name |
-| `presets` | the same, keyed by path |
+| `presets` | the same, keyed by path, or by name with `--by-name` |
 
 ### history
 

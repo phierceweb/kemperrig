@@ -1,16 +1,15 @@
 """`Backup` — one Rig Manager library opened from any of its four forms: a `.rmbackup` zip,
 the live directory, a dated snapshot, or a pack (layouts in docs/format.md). Which db is
 which is decided here; rows become records in `_tables.py` and `_packs.py`. Nothing here
-writes; `write_refusal` is the guard the three writers start from.
+writes.
 """
 
 from __future__ import annotations
 
-import errno
-import os
 import sqlite3
 import xml.etree.ElementTree as ET
 import zipfile
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +23,6 @@ from kemperrig._tables import (
     _LIB_PREFIX,
     _PERF_DB,
     _PRESET_PREFIX,
-    _REPOSITORY_DB,
     _SNAPSHOT_DIR,
     _SNAPSHOT_NAME,
     _SNAPSHOT_SUFFIX,
@@ -95,70 +93,6 @@ def read_pack(path: str | Path) -> Pack:
     raise ValueError(f"{path}: not a Rig Manager rig or preset pack")
 
 
-# Folders only a Rig Manager library tree holds at its root.
-_TREE_MARKERS = (_LIB_PREFIX.rstrip("/"), _PRESET_PREFIX.rstrip("/"), _PERF_DB.split("/")[0])
-
-
-def library_root(path: str | Path) -> Path | None:
-    """The Rig Manager library tree `path` lies in — the nearest of it and its ancestors that
-    holds `Local Library/`, `Prst/`, `Prf/` or a `repositoryR2.db` — or None. `path` need not
-    exist."""
-    p = Path(path).resolve()
-    for d in (p, *p.parents):
-        if (d / _REPOSITORY_DB).is_file() or any((d / m).is_dir() for m in _TREE_MARKERS):
-            return d
-    return None
-
-
-def within(path: Path, root: str | Path) -> bool:
-    """`path` is `root` or lies under it, by file identity: case variants and symlinks count."""
-    return any(d.exists() and os.path.samefile(d, root) for d in (path, *path.parents))
-
-
-def is_same_file(a: str | Path, b: str | Path) -> bool:
-    """True when two paths reach one file — case variants, symlinks and hardlinks included."""
-    try:
-        return os.path.samefile(a, b)
-    except OSError:  # one does not exist yet, which is the normal case for an output
-        return Path(a).resolve() == Path(b).resolve()
-
-
-def _symlink_loop(path: str | Path) -> OSError | None:
-    """The error a symlink loop on the way to `path` raises, or None. From Python 3.13 a
-    non-strict `resolve()` returns a looping path instead of raising, so ask the filesystem."""
-    try:
-        os.stat(path)
-    except OSError as e:
-        if e.errno == errno.ELOOP:
-            return e
-    return None
-
-
-def names_folder(target: str) -> bool:
-    """`target` is a folder, or is spelled as one — `out/` — whether or not it exists."""
-    return target.endswith(tuple(s for s in (os.sep, os.altsep) if s)) or os.path.isdir(target)
-
-
-def write_refusal(target: str | Path, source: str, flag: str) -> str | None:
-    """Why writing at `target` could reach `source` or a Rig Manager library, or None. Every
-    writer runs this before its own checks; `flag` names the option in the message."""
-    try:
-        resolved = Path(target).resolve()
-    except (RuntimeError, OSError) as e:   # a symlink loop, up to Python 3.12
-        return f"cannot resolve {target}: {e}"
-    if (loop := _symlink_loop(target)) is not None:
-        return f"cannot resolve {target}: {loop.strerror}"
-    if os.path.isfile(source) and is_same_file(target, source):
-        return f"refusing to overwrite the source {source} — choose a different {flag}"
-    if os.path.isdir(source) and within(resolved, source):
-        return f"refusing to write inside the source {source} — choose a {flag} outside it"
-    root = library_root(resolved)
-    if root is not None:
-        return (f"refusing to write inside the Rig Manager library at {root} — choose a "
-                f"{flag} outside it")
-    return None
-
-
 def _mis_rooted(path: object) -> str:
     """Databases are present but none sat where the layout expects — almost always a path
     one level off, e.g. the parent of the Rig Manager tree rather than the tree itself."""
@@ -187,10 +121,21 @@ def zip_layout_problem(path: str | Path, names: list[str]) -> str | None:
     """Why a zip holding the entries `names` is not a Rig Manager backup, or None."""
     if not any(n.endswith(_DB_SUFFIX) for n in names):
         return f"{path}: no repositoryR2.db inside — not a Rig Manager backup"
-    if not any(n == _PERF_DB or rig_folder(n) is not None or preset_folder(n) is not None
-               for n in names):
+    dbs = [n for n in names if n == _PERF_DB or rig_folder(n) is not None
+           or preset_folder(n) is not None]
+    if not dbs:
         return _mis_rooted(path)
+    twice = [n for n, k in Counter(dbs).items() if k > 1]
+    if twice:
+        return (f"{path}: {twice[0]!r} appears twice — Rig Manager writes each database once, "
+                "so the archive is damaged or was not written by it")
     return None
+
+
+def _common(absent: list[frozenset[str] | None]) -> frozenset[str]:
+    """Fields every rig db lacks a column for; a db without a Rigs table has no say."""
+    known = [a for a in absent if a is not None]
+    return frozenset.intersection(*known) if known else frozenset()
 
 
 @dataclass(frozen=True)
@@ -199,6 +144,7 @@ class Backup:
     rigs: list[Rig]
     performances: list[Performance]
     presets: list[Preset]
+    absent: frozenset[str] = frozenset()   # record fields this source has no column for
 
     @classmethod
     def open(cls, path: str) -> "Backup":
@@ -221,10 +167,13 @@ class Backup:
                     if _INFO in names else _NO_INFO)
             rigs: list[Rig] = []
             presets: list[Preset] = []
+            absent: list[frozenset[str] | None] = []
             for entry in names:
                 if (folder := rig_folder(entry)) is not None:
-                    rigs.extend(_read_rigs(read_entry(zf, entry, path), folder,
-                                           f"{entry} in {path}"))
+                    found, lacks = _read_rigs(read_entry(zf, entry, path), folder,
+                                              f"{entry} in {path}")
+                    rigs.extend(found)
+                    absent.append(lacks)
                 elif (folder := preset_folder(entry)) is not None:
                     presets.extend(_read_presets(read_entry(zf, entry, path), folder,
                                                  f"{entry} in {path}"))
@@ -232,7 +181,8 @@ class Backup:
                 _read_performances(read_entry(zf, _PERF_DB, path), f"{_PERF_DB} in {path}")
                 if _PERF_DB in names else []
             )
-        return cls(info=info, rigs=rigs, performances=performances, presets=presets)
+        return cls(info=info, rigs=rigs, performances=performances, presets=presets,
+                   absent=_common(absent))
 
     @classmethod
     def _open_db(cls, path: Path) -> "Backup":
@@ -241,15 +191,17 @@ class Backup:
         try:
             if _packs.is_pack(con, str(path)):
                 return cls.from_pack(_packs.read_pack(con, str(path)))
-            rigs, performances, presets = _snapshot(con, str(path))
+            rigs, performances, presets, absent = _snapshot(con, str(path))
         finally:
             con.close()
-        return cls(info=_NO_INFO, rigs=rigs, performances=performances, presets=presets)
+        return cls(info=_NO_INFO, rigs=rigs, performances=performances, presets=presets,
+                   absent=absent)
 
     @classmethod
     def from_pack(cls, pack: Pack) -> "Backup":
         """A pack's rigs or presets as a library of their own, with no folders."""
-        return cls(info=_NO_INFO, rigs=pack.rigs, performances=[], presets=pack.presets)
+        return cls(info=_NO_INFO, rigs=pack.rigs, performances=[], presets=pack.presets,
+                   absent=_packs.ABSENT)
 
     @classmethod
     def open_live(cls, root: str | Path) -> "Backup":
@@ -262,13 +214,16 @@ class Backup:
         rigs: list[Rig] = []
         presets: list[Preset] = []
         performances: list[Performance] = []
+        absent: list[frozenset[str] | None] = []
         matched = 0
         for db in sorted(rootp.rglob("repositoryR2.db")):
             entry = db.relative_to(rootp).as_posix()
             if entry == _PERF_DB:
                 performances = _read_performances(db.read_bytes(), str(db))
             elif (folder := rig_folder(entry)) is not None:
-                rigs.extend(_read_rigs(db.read_bytes(), folder, str(db)))
+                found, lacks = _read_rigs(db.read_bytes(), folder, str(db))
+                rigs.extend(found)
+                absent.append(lacks)
             elif (folder := preset_folder(entry)) is not None:
                 presets.extend(_read_presets(db.read_bytes(), folder, str(db)))
             else:
@@ -276,4 +231,5 @@ class Backup:
             matched += 1
         if not matched:
             raise FileNotFoundError(_mis_rooted(rootp))
-        return cls(info=_NO_INFO, rigs=rigs, performances=performances, presets=presets)
+        return cls(info=_NO_INFO, rigs=rigs, performances=performances, presets=presets,
+                   absent=_common(absent))

@@ -33,8 +33,8 @@ PERF_DDL = """CREATE TABLE "Performances" (
 _SLOT_KINDS = ["Name", "Enable", "RigName", "AmpName", "CabName"]
 
 
-def _perf_ddl() -> str:
-    cols = []
+def _perf_ddl(extra: tuple[str, ...] = ()) -> str:
+    cols = [f'"{c}" TEXT' for c in extra]
     for n in range(1, PERF_SLOTS + 1):
         for kind in _SLOT_KINDS:
             cols.append(f'"Slot{n}{kind}" TEXT')
@@ -106,6 +106,7 @@ def _perf_row(perf: dict) -> dict:
         row[f"Slot{n}RigName"] = slot.get("rig_name")
         row[f"Slot{n}AmpName"] = slot.get("amp_name")
         row[f"Slot{n}CabName"] = slot.get("cab_name")
+    row["ProgNr"] = perf.get("prog_nr")
     row["_blob"] = perf.get("blob", b"")
     return row
 
@@ -127,6 +128,7 @@ def _rig_row(rig: dict) -> dict:
         "Profile Revision": rig.get("profile_revision", "0"),
         "Cabinet Type": rig.get("cabinet_type", "0"),
         "Cabinet Configuration": rig.get("cabinet_configuration", "N/A"),
+        "KPAID": rig.get("kpaid"),
         "_blob": rig.get("blob", b""),
     }
 
@@ -138,7 +140,8 @@ def build_rmbackup(dest: str, *, rigs: list[dict], performances: list[dict] | No
     """Write a synthetic `.rmbackup` to `dest`.
 
     Each rig dict needs `name`; optional `author/gain/amp_model/cabinet_name/profile_type/folder/blob`.
-    `folder` is the library path (default 'Guitar/Test/Amp'); rigs are grouped into one db per folder.
+    `folder` is the library path (default 'Guitar/Test/Amp', '' the top level); rigs are grouped
+    into one db per folder.
     `omit_rig_columns` drops `Rigs` columns, modelling a db from an older Rig Manager.
     """
     rig_fields = [f for f in RIG_FIELDS if f not in omit_rig_columns]
@@ -156,7 +159,8 @@ def build_rmbackup(dest: str, *, rigs: list[dict], performances: list[dict] | No
         for folder, folder_rigs in by_folder.items():
             data = _db_bytes(_rigs_ddl(rig_fields), "Rigs_blobs", rig_fields,
                              [_rig_row(r) for r in folder_rigs])
-            zf.writestr(f"Local Library/{folder}/repositoryR2.db", data)
+            zf.writestr(f"Local Library/{folder}/repositoryR2.db" if folder
+                        else "Local Library/repositoryR2.db", data)
         if performances:
             data = _db_bytes(_perf_ddl(), "Performances_blobs", _perf_insert_cols(performances),
                              [_perf_row(p) for p in performances])
@@ -170,7 +174,7 @@ def build_rmbackup(dest: str, *, rigs: list[dict], performances: list[dict] | No
     return dest
 
 
-# A snapshot's Rigs table has no profile-type columns; KPAID is extra and unread.
+# A snapshot's Rigs table has no profile-type columns, and an extra KPAID.
 SNAPSHOT_RIG_FIELDS = [f for f in RIG_FIELDS
                        if f not in ("Profile Type", "Profile Revision")] + ["KPAID"]
 SNAPSHOT_TABLES = ("Rigs", "Performances", "Presets", "ROMPresets")
@@ -187,7 +191,8 @@ def build_snapshot(dest: str, *, rigs: list[dict] = (), performances: list[dict]
     tables = {
         "Rigs": (_rigs_ddl(SNAPSHOT_RIG_FIELDS), SNAPSHOT_RIG_FIELDS,
                  [_rig_row(r) for r in rigs]),
-        "Performances": (_perf_ddl(), _perf_insert_cols([]), [_perf_row(p) for p in performances]),
+        "Performances": (_perf_ddl(("ProgNr",)), [*_perf_insert_cols([]), "ProgNr"],
+                         [_perf_row(p) for p in performances]),
         "Presets": (PRESET_DDL, PRESET_FIELDS, [_preset_row(p) for p in presets]),
         "ROMPresets": (PRESET_DDL.replace('"Presets"', '"ROMPresets"'), PRESET_FIELDS,
                        [_preset_row(p) for p in rom_presets]),
